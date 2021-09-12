@@ -1,0 +1,21 @@
+[package]
+name = "os"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[workspace]
+members = ["x86_64"]
+
+[features]
+qemu = []
+
+[dependencies]
+bootloader = "0.9"
+bitflags = {version="1", default-features=false}
+x86_64 = {path = "x86_64"}
+
+
+[package.metadata.bootimage]
+run-args = ["-serial", "vc"]
+test-args = ["-serial", "stdio"]
