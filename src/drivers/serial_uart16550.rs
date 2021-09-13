@@ -1,7 +1,7 @@
 #[allow(dead_code)]
 use bitflags::bitflags;
 
-use x86_64::port::{Port, RPort, RWPort, WPort};
+use libx64::port::{Port, RPort, RWPort, WPort};
 
 bitflags! {
     /// Interrupt enable flags

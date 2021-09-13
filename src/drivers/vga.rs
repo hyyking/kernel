@@ -1,8 +1,9 @@
-use crate::ptr::volatile::Volatile;
 use core::fmt::{self, Write};
 
-use crate::sync::lazy::Lazy;
-use crate::sync::mutex::SpinMutex;
+use kcore::{
+    ptr::volatile::Volatile,
+    sync::{lazy::Lazy, mutex::SpinMutex},
+};
 
 type __D = Lazy<SpinMutex<VgaDriver<80, 25>>, fn() -> SpinMutex<VgaDriver<80, 25>>>;
 pub static DRIVER: __D = Lazy::new(|| SpinMutex::new(VgaDriver::new()));

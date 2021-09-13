@@ -1,5 +1,6 @@
 #![feature(custom_test_frameworks)]
 #![feature(asm)]
+#![feature(abi_x86_interrupt)]
 #![test_runner(crate::infra::tests::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 #![no_main]
@@ -7,7 +8,10 @@
 
 use core::panic::PanicInfo;
 
-use x86_64::hlt;
+use libx64::{
+    hlt,
+    idt::{lidt, InterruptDescriptorTable as Idt, InterruptFrame},
+};
 
 #[macro_use]
 pub mod drivers;
@@ -15,14 +19,20 @@ pub mod drivers;
 #[macro_use]
 mod infra;
 
-pub mod ptr;
-pub mod sync;
+static mut IDT: Idt = Idt::new();
 
 #[no_mangle]
 pub extern "C" fn _start() {
-    kprintln!("kernel init");
+    kprintln!("[OK] kernel loaded");
 
-    qprintln!("HERERERERE");
+    unsafe {
+        kprintln!("[OK] IDT loaded");
+        IDT.set_handler(0x03, test_int3);
+        lidt(&IDT);
+        asm!("int3");
+    }
+
+    kprintln!("[OK] int3");
 
     #[cfg(test)]
     test_main();
@@ -30,8 +40,12 @@ pub extern "C" fn _start() {
     hlt();
 }
 
+pub extern "x86-interrupt" fn test_int3(f: InterruptFrame) {
+    kprintln!("{:#?}", f)
+}
+
 #[panic_handler]
 fn ph(info: &PanicInfo) -> ! {
-    kprintln!("panic: {}", info);
+    kprintln!("[PANIC]: {}", info);
     hlt();
 }
