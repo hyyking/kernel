@@ -1,11 +1,9 @@
-mod entry;
 mod stack;
 mod table;
 
 use crate::address::VirtualAddr;
 
 pub use crate::idt::table::InterruptDescriptorTable;
-pub use entry::{Entry, Options};
 pub use stack::InterruptFrame;
 
 pub fn lidt(idt: &'static InterruptDescriptorTable) {
