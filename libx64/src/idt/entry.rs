@@ -1,20 +1,35 @@
 use crate::address::VirtualAddr;
 
-/// Default setup:
-///
-/// 0000 0110 0000 0000
-/// ^    ^  ^
-/// |^^  |  Fault/Trap gate
-/// ||/  |                      
-/// ||   Gate size 1 = 32b / 0 = 16b                    
-/// ||                          
-/// |Descriptor Privilege Level
-/// |
-/// Presence flag
-#[derive(Debug, Clone, Copy)]
-#[repr(transparent)]
-pub struct Options {
-    bits: u16,
+use bitfield::{bitfield, BitField};
+
+bitfield! {
+    // SAFETY: no bits are overlaping
+    #[derive(Debug, Clone, Copy)]
+    #[repr(transparent)]
+    pub unsafe struct Options: u16 {
+        /// Interupt stack table index
+        pub ist: 0..3,
+
+        /// reserved and always 0
+        reserved1: 3..8,
+
+        /// gate types:
+        /// 0b0101 	0x5 	5 	80386 32 bit task gate
+        /// 0b0110 	0x6 	6 	80286 16-bit interrupt gate
+        /// 0b0111 	0x7 	7 	80286 16-bit trap gate
+        /// 0b1110 	0xE 	14 	80386 32-bit interrupt gate
+        /// 0b1111 	0xF 	15 	80386 32-bit trap gate
+        pub gate_type: 8..12,
+
+        /// reserved and always 0
+        reserved2: 12..13,
+
+        /// Descriptor privilege level
+        pub dpl: 13..15,
+
+        /// Presence flag, set to 0 for unused interrupts.
+        pub present: 15..16,
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -58,34 +73,13 @@ impl Entry {
 }
 
 impl Options {
+    /// Default setup:
+    /// - ist: 0
+    /// - gate_type: 0b1110 (Interupt gate)
+    /// - dpl: 0
+    /// - presence: 0 (not present)
     pub const fn empty() -> Self {
-        Self {
-            bits: 0b0000_1110_0000_0000,
-        }
-    }
-
-    pub const fn dpl(&self) -> u16 {
-        (self.bits & (2 << 13)) >> 13
-    }
-
-    pub const fn present(&self) -> bool {
-        (self.bits & (1 << 15)) != 0
-    }
-
-    pub fn set_present(&mut self) {
-        self.bits |= 1 << 15
-    }
-
-    pub const fn trap_gate(&self) -> bool {
-        // 0
-        (self.bits & (1 << 8)) != 0
-    }
-
-    pub const fn gate_size(&self) -> u8 {
-        match (self.bits & (1 << 11)) > 0 {
-            true => 32,
-            false => 16,
-        }
+        Self(0b0000_1110_0000_0000)
     }
 }
 
@@ -97,7 +91,7 @@ impl core::fmt::Debug for Entry {
         f.debug_struct("IdtEntry")
             .field("handler", &format_args!("{:#02x}", handler))
             .field("gdt_sel", &self.gdt_selector)
-            .field("options", &format_args!("{:#0b}", self.options.bits))
+            .field("options", &format_args!("{:#0b}", self.options.0))
             .finish()
     }
 }

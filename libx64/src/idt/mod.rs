@@ -16,7 +16,7 @@ pub fn lidt(idt: &'static InterruptDescriptorTable) {
     }
     let ptr = &IdtPtr {
         limit: (core::mem::size_of::<InterruptDescriptorTable>() - 1) as u16,
-        addr: VirtualAddr::new(idt.entries_ptr() as u64).unwrap(),
+        addr: VirtualAddr::from_ptr(idt.entries().as_ptr()),
     };
     // SAFETY: we assure the IDT pointer is well defined
     unsafe {

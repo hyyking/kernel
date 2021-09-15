@@ -13,11 +13,11 @@ impl core::fmt::Debug for VirtualAddr {
 }
 
 impl VirtualAddr {
-    pub const fn new(addr: u64) -> Result<Self, u64> {
+    pub const fn new(addr: u64) -> Self {
         match addr >> 47 {
-            0 | 0x1FFFF => Ok(Self(addr)),
-            1 => Ok(Self(((addr << 16) as i64 >> 16) as u64)),
-            _ => Err(addr),
+            0 | 0x1FFFF => Self(addr),
+            1 => Self(((addr << 16) as i64 >> 16) as u64),
+            _ => panic!(),
         }
     }
 
@@ -25,7 +25,15 @@ impl VirtualAddr {
         NonNull::new(self.0 as *mut T)
     }
 
+    pub fn from_ptr<T>(ptr: *const T) -> Self {
+        Self::new(ptr as u64)
+    }
+
     pub fn as_u64(&self) -> u64 {
         self.0
+    }
+
+    pub(crate) const fn null() -> VirtualAddr {
+        Self(0)
     }
 }

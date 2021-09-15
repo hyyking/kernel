@@ -10,6 +10,7 @@ pub struct InterruptDescriptorTable {
 }
 
 type Handler = extern "x86-interrupt" fn(InterruptFrame);
+type CodeHandler = extern "x86-interrupt" fn(InterruptFrame, u64);
 
 impl InterruptDescriptorTable {
     pub const fn new() -> Self {
@@ -19,22 +20,33 @@ impl InterruptDescriptorTable {
     }
 
     pub fn set_handler(&mut self, idx: u8, h: Handler) {
+        self.register(idx, VirtualAddr::new(h as u64));
+    }
+
+    pub fn set_handler_with_code(&mut self, idx: u8, h: CodeHandler) {
+        self.register(idx, VirtualAddr::new(h as u64));
+    }
+
+    fn register(&mut self, idx: u8, h: VirtualAddr) {
         let entry = &mut self.entries[usize::from(idx)];
 
-        // TODO: refactor this part
-        let cs = unsafe {
+        entry.set_fn_ptr(h);
+
+        // TODO: code segement fetch
+        entry.set_cs_sel(Self::get_cs());
+        entry.options_mut().set_present(1);
+    }
+
+    fn get_cs() -> u16 {
+        unsafe {
             let segment: u16;
             asm!("mov {0:x}, cs", out(reg) segment, options(nomem, nostack, preserves_flags));
             segment
-        };
-
-        entry.set_fn_ptr(VirtualAddr::new(h as u64).expect("unaligned handler"));
-        entry.set_cs_sel(cs);
-
-        entry.options_mut().set_present();
+        }
     }
 
-    pub(super) fn entries_ptr(&self) -> *const Entry {
-        self.entries.as_ptr()
+    /// Get a reference to the interrupt descriptor table's entries.
+    pub fn entries(&self) -> &[Entry] {
+        &self.entries[..]
     }
 }
