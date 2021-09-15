@@ -1,9 +1,13 @@
-#![feature(asm, abi_x86_interrupt)]
+#![feature(asm)]
+#![feature(abi_x86_interrupt)]
+#![feature(const_panic)]
 #![no_std]
 
 pub mod address;
+pub mod gdt;
 pub mod idt;
 pub mod port;
+pub mod tss;
 
 pub fn hlt() -> ! {
     unsafe {

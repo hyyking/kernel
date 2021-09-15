@@ -6,42 +6,34 @@
 #![no_main]
 #![no_std]
 
+#[macro_use]
+extern crate kcore;
+
 use core::panic::PanicInfo;
 
-use libx64::{
-    hlt,
-    idt::{lidt, InterruptDescriptorTable as Idt, InterruptFrame},
-};
+use libx64::hlt;
 
 #[macro_use]
 pub mod drivers;
-
 #[macro_use]
 mod infra;
-
-static mut IDT: Idt = Idt::new();
+mod init;
 
 #[no_mangle]
 pub extern "C" fn _start() {
     kprintln!("[OK] kernel loaded");
 
-    unsafe {
-        kprintln!("[OK] IDT loaded");
-        IDT.set_handler(0x03, test_int3);
-        lidt(&IDT);
-        asm!("int3");
-    }
+    init::kinit();
 
-    kprintln!("[OK] int3");
+    kprintln!("[OK] kernel initialized");
+
+    unsafe { asm!("int3") }
 
     #[cfg(test)]
     test_main();
 
+    kprintln!("didn't crash");
     hlt();
-}
-
-pub extern "x86-interrupt" fn test_int3(f: InterruptFrame) {
-    kprintln!("{:#?}", f)
 }
 
 #[panic_handler]
