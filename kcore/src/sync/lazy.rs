@@ -3,6 +3,14 @@ use core::ops::Deref;
 
 use crate::sync::mutex::SpinMutex;
 
+#[macro_export]
+macro_rules! klazy {
+    ( $(#[$attr:meta])* $v:vis ref static $name:ident: $t:ty = $b:expr;) => {
+        $(#[$attr])*
+        $v static $name: $crate::sync::lazy::Lazy<$t> = $crate::sync::lazy::Lazy::new(|| $b);
+    }
+}
+
 pub struct Lazy<T, F = fn() -> T> {
     f: SpinMutex<Option<F>>,
     data: UnsafeCell<Option<T>>,

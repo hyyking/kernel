@@ -69,7 +69,7 @@ impl<T> SpinMutex<T> {
     }
 
     #[inline]
-    pub fn try_poison<'a>(lock: &'a Self) -> Option<&'a mut T> {
+    pub fn try_poison(lock: &Self) -> Option<&mut T> {
         if lock.is_locked() {
             return None;
         }
