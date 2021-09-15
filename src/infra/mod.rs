@@ -20,6 +20,7 @@ macro_rules! cfg_not_qemu {
     }
 }
 
+#[macro_use]
 pub mod qemu;
 #[cfg(test)]
 pub mod tests;

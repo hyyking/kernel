@@ -3,15 +3,18 @@ cfg_qemu! {
 
     use crate::{
         drivers::serial_uart16550::SerialPort,
-        sync::{lazy::Lazy, mutex::SpinMutex},
-    };
 
-    // SAFETY: we are the only one accessing this port
-    static DRIVER: Lazy<SpinMutex<SerialPort>> = Lazy::new(|| unsafe {
-        let mut port = SerialPort::new(0x3F8);
-        port.init();
-        SpinMutex::new(port)
-    });
+    };
+    use kcore::sync::{mutex::SpinMutex};
+
+    klazy! {
+        // SAFETY: we are the only one accessing this port
+        ref static DRIVER: SpinMutex<SerialPort> = unsafe {
+            let mut port = SerialPort::new(0x3F8);
+            port.init();
+            SpinMutex::new(port)
+        };
+    }
 
     #[doc(hidden)]
     pub(crate) fn _qprint(args: core::fmt::Arguments) {

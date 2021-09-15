@@ -54,7 +54,7 @@ macro_rules! ktest {
 
 mod tests {
     use super::*;
-    use x86_64::idt::{InterruptDescriptorTable as Idt, InterruptFrame};
+    use libx64::idt::{lidt, InterruptDescriptorTable as Idt, InterruptFrame};
 
     static mut IDT: Idt = Idt::new();
 
@@ -78,7 +78,7 @@ mod tests {
         fn test_load_idt() -> TestResult {
             unsafe {
                 IDT.set_handler(0x03, self::test_int3);
-                IDT.load();
+                lidt(&IDT);
             }
             TestResult::Ok
         }
@@ -87,6 +87,24 @@ mod tests {
             unsafe {
                 asm!("int3");
             }
+            TestResult::Ok
+        }
+
+
+        fn bitfield_impl() -> TestResult {
+            use bitfield::{bitfield, BitField};
+            bitfield! {
+                #[repr(transparent)]
+                unsafe struct Test: u16 {
+                    b: 0..3,
+                }
+            }
+
+            let mut t = Test(0);
+            t.set_b(7);
+
+            kprintln!("{:#b}", t.0);
+
             TestResult::Ok
         }
 

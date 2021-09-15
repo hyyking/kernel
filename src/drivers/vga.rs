@@ -1,12 +1,10 @@
 use core::fmt::{self, Write};
 
-use kcore::{
-    ptr::volatile::Volatile,
-    sync::{lazy::Lazy, mutex::SpinMutex},
-};
+use kcore::{ptr::volatile::Volatile, sync::mutex::SpinMutex};
 
-type __D = Lazy<SpinMutex<VgaDriver<80, 25>>, fn() -> SpinMutex<VgaDriver<80, 25>>>;
-pub static DRIVER: __D = Lazy::new(|| SpinMutex::new(VgaDriver::new()));
+klazy! {
+    pub ref static DRIVER: SpinMutex<VgaDriver<80, 25>> = SpinMutex::new(VgaDriver::new());
+}
 
 #[macro_export]
 macro_rules! kprint {
@@ -70,7 +68,9 @@ impl Character {
         self.ccode = c as u8;
     }
     pub fn set_color(&mut self, fg: Color, bg: Color) {
-        self.color = (fg as u8) | ((bg as u8) << 4);
+        let fg = fg as u8 & 0b0000_1111; // mask unused bytes
+        let bg = bg as u8 & 0b0000_1111; // mask unused bytes
+        self.color = fg | (bg << 4);
     }
 }
 
