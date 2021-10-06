@@ -19,7 +19,7 @@ impl CallGateDescriptor {
             offset_low: 0,
             selector: 0,
             _reserved1: 0,
-            flags: CgFlags(0b0000_0000 | SystemSegmentType::CallGate as u8),
+            flags: CgFlags(SystemSegmentType::CallGate as u8),
             offset_middle: 0,
             offset_high: 0,
             _reserved2: 0,
@@ -28,7 +28,7 @@ impl CallGateDescriptor {
 }
 
 bitfield! {
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Clone, Copy)]
     #[repr(transparent)]
     pub unsafe struct CgFlags: u8 {
         ss_type: 0..4,

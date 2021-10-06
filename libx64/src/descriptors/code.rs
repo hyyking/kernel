@@ -11,8 +11,40 @@ pub struct CodeSegmentDescriptor {
     base_high: u8,
 }
 
+impl CodeSegmentDescriptor {
+    pub fn empty() -> Self {
+        Self {
+            limit_low: 0,
+            base_low: 0,
+            middle_base: 0,
+            flags: CsFlags::zero(),
+            limit_flags: FlagsLimit::zero(),
+            base_high: 0,
+        }
+    }
+
+    pub fn kernel_x64() -> Self {
+        let mut this = Self::empty();
+        this.limit_low = u16::MAX;
+        this.limit_flags.set_limit_high(0b1111);
+
+        this.flags.set_readable(1);
+        this.flags.set_access(1);
+        this.flags.set_presence(1);
+
+        this.flags.set_res1(1);
+        this.flags.set_res2(1);
+
+        this.limit_flags.set_granularity(1);
+
+        this.limit_flags.set_long(1);
+
+        this
+    }
+}
+
 bitfield! {
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Clone, Copy)]
     #[repr(transparent)]
     pub unsafe struct CsFlags: u8 {
         access: 0..1,
@@ -42,7 +74,7 @@ bitfield! {
 }
 
 bitfield! {
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Clone, Copy)]
     #[repr(transparent)]
     pub unsafe struct FlagsLimit: u8 {
         limit_high: 0..4,

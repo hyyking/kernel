@@ -1,16 +1,8 @@
 use core::ptr::NonNull;
 
 #[derive(Clone, Copy)]
-#[repr(C)]
+#[repr(transparent)]
 pub struct VirtualAddr(u64);
-
-impl core::fmt::Debug for VirtualAddr {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_tuple("VirtualAddr")
-            .field(&format_args!("{:#02x}", self.0))
-            .finish()
-    }
-}
 
 impl VirtualAddr {
     pub const fn new(addr: u64) -> Self {
@@ -29,11 +21,19 @@ impl VirtualAddr {
         Self::new(ptr as u64)
     }
 
-    pub fn as_u64(&self) -> u64 {
+    pub const fn as_u64(&self) -> u64 {
         self.0
     }
 
-    pub(crate) const fn null() -> VirtualAddr {
+    pub const fn null() -> VirtualAddr {
         Self(0)
+    }
+}
+
+impl core::fmt::Debug for VirtualAddr {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("VirtualAddr")
+            .field(&format_args!("{:#02x}", self.0))
+            .finish()
     }
 }

@@ -12,7 +12,7 @@ pub struct DataSegmentDescriptor {
 }
 
 bitfield! {
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Clone, Copy)]
     #[repr(transparent)]
     pub unsafe struct DsFlags: u8 {
         access: 0..1,
@@ -41,7 +41,7 @@ bitfield! {
 }
 
 bitfield! {
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Clone, Copy)]
     #[repr(transparent)]
     pub unsafe struct FlagsLimit: u8 {
         limit_high: 0..4,
