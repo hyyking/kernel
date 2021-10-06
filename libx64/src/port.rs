@@ -10,8 +10,14 @@ impl PortAccess for PortRead {}
 impl PortAccess for PortWrite {}
 
 pub trait PortValue {
+    /// # Safety
+    ///
+    /// You shall not read from an invalid port
     unsafe fn read(port: u16) -> Self;
 
+    /// # Safety
+    ///
+    /// You shall not write to an invalid port
     unsafe fn write(port: u16, value: Self)
     where
         Self: Sized;
@@ -96,10 +102,17 @@ impl<V, A> Port<V, A> {
 }
 
 impl<V: PortValue> Port<V, PortReadWrite> {
+    /// # Safety
+    ///
+    /// You shall not read from an invalid port
     #[inline]
-    pub unsafe fn read(&mut self) -> V {
+    pub unsafe fn read(&self) -> V {
         V::read(self.base)
     }
+
+    /// # Safety
+    ///
+    /// You shall not write to an invalid port
     #[inline]
     pub unsafe fn write(&mut self, value: V) {
         V::write(self.base, value)
@@ -107,13 +120,19 @@ impl<V: PortValue> Port<V, PortReadWrite> {
 }
 
 impl<V: PortValue> Port<V, PortRead> {
+    /// # Safety
+    ///
+    /// You shall not read from an invalid port
     #[inline]
-    pub unsafe fn read(&mut self) -> V {
+    pub unsafe fn read(&self) -> V {
         V::read(self.base)
     }
 }
 
 impl<V: PortValue> Port<V, PortWrite> {
+    /// # Safety
+    ///
+    /// You shall not write to an invalid port
     #[inline]
     pub unsafe fn write(&mut self, value: V) {
         V::write(self.base, value);
