@@ -37,6 +37,9 @@ checksum = "b7c452074efc3c0bfb241fb7bc87df04741c7c85e926f6a07c05f8fbd6008240"
 [[package]]
 name = "kcore"
 version = "0.1.0"
+dependencies = [
+ "libx64",
+]
 
 [[package]]
 name = "libx64"
@@ -54,6 +57,7 @@ dependencies = [
  "bootloader",
  "kcore",
  "libx64",
+ "pic",
  "x86_64",
 ]
 
@@ -62,6 +66,14 @@ name = "paste"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acbf547ad0c65e31259204bd90935776d1c693cec2f4ff7abb7a1bbbd40dfe58"
+
+[[package]]
+name = "pic"
+version = "0.1.0"
+dependencies = [
+ "bitfield",
+ "libx64",
+]
 
 [[package]]
 name = "volatile"
