@@ -90,23 +90,5 @@ mod tests {
             TestResult::Ok
         }
 
-
-        fn bitfield_impl() -> TestResult {
-            use bitfield::{bitfield, BitField};
-            bitfield! {
-                #[repr(transparent)]
-                unsafe struct Test: u16 {
-                    b: 0..3,
-                }
-            }
-
-            let mut t = Test(0);
-            t.set_b(7);
-
-            kprintln!("{:#b}", t.0);
-
-            TestResult::Ok
-        }
-
     }
 }

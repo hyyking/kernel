@@ -18,7 +18,9 @@ macro_rules! kprintln {
 }
 
 pub fn _kprint(args: fmt::Arguments) {
-    DRIVER.lock().cursor().write_fmt(args).expect("kprint");
+    libx64::without_interrupts(|| {
+        DRIVER.lock().cursor().write_fmt(args).expect("kprint");
+    })
 }
 
 #[allow(dead_code)]
@@ -77,6 +79,7 @@ impl Character {
 impl<const C: usize, const L: usize> VgaDriver<C, L> {
     const TAB_SIZE: usize = 4;
 
+    #[allow(clippy::transmute_ptr_to_ref)]
     pub fn new() -> Self {
         Self {
             buffer: unsafe { core::mem::transmute(0xb8000 as *mut Self) },
@@ -142,5 +145,11 @@ impl<'a, const C: usize, const L: usize> Write for Cursor<'a, C, L> {
     fn write_char(&mut self, c: char) -> core::fmt::Result {
         self.write_character(c, Color::BrightWhite, Color::Black)?;
         Ok(())
+    }
+}
+
+impl<const C: usize, const L: usize> Default for VgaDriver<C, L> {
+    fn default() -> Self {
+        Self::new()
     }
 }

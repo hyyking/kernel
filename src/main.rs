@@ -11,8 +11,6 @@ extern crate kcore;
 
 use core::panic::PanicInfo;
 
-use libx64::hlt;
-
 #[macro_use]
 pub mod drivers;
 #[macro_use]
@@ -24,20 +22,18 @@ pub extern "C" fn _start() {
     kprintln!("[OK] kernel loaded");
 
     init::kinit();
-
-    kprintln!("[OK] kernel initialized");
-
-    unsafe { asm!("int3") }
+    libx64::sti();
 
     #[cfg(test)]
     test_main();
 
     kprintln!("didn't crash");
-    hlt();
+
+    libx64::diverging_hlt();
 }
 
 #[panic_handler]
 fn ph(info: &PanicInfo) -> ! {
     kprintln!("[PANIC]: {}", info);
-    hlt();
+    libx64::diverging_hlt();
 }

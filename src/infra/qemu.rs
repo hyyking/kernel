@@ -31,6 +31,18 @@ cfg_qemu! {
         () => ($crate::qprint!("\n"));
         ($($arg:tt)*) => ($crate::infra::qemu::_qprint(format_args!("{}\n", format_args!($($arg)*))));
     }
+
+    #[macro_export]
+    macro_rules! dbg {
+        ($arg:expr) => {{
+        qprintln!(
+            "[DEBUG][{}:{}] = {:#?}",
+            core::file!(),
+            core::line!(),
+            $arg);
+            $arg
+        }};
+    }
 }
 
 cfg_not_qemu! {
@@ -43,5 +55,10 @@ cfg_not_qemu! {
     macro_rules! qprintln {
         () => ();
         ($($arg:tt)*) => ();
+    }
+
+    #[macro_export]
+    macro_rules! dbg {
+        ($arg:expr) => { { $arg  } };
     }
 }

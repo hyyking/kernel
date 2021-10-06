@@ -1,4 +1,3 @@
-#[allow(dead_code)]
 use bitflags::bitflags;
 
 use libx64::port::{Port, RPort, RWPort, WPort};
@@ -43,6 +42,7 @@ pub struct SerialPort {
 impl SerialPort {
     /// Creates a new serial port interface on the given I/O port.
     ///
+    /// # Safety
     /// This function is unsafe because the caller must ensure that the given base address
     /// really points to a serial port device.
     pub const unsafe fn new(base: u16) -> Self {
