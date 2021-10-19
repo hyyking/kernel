@@ -58,58 +58,44 @@ impl<H> Entry<H> {
 #[repr(C, align(16))]
 pub struct InterruptDescriptorTable {
     pub divide_by_zero: Entry<Handler>,
-
     pub debug: Entry<Handler>,
-
     pub non_maskable: Entry<Handler>,
-
     pub breakpoint: Entry<Handler>,
-
     pub overflow: Entry<Handler>,
-
     pub bound_range: Entry<Handler>,
-
     pub invalid_opcode: Entry<Handler>,
-
     pub device_not_available: Entry<Handler>,
-
     pub double_fault: Entry<DivergingCodeHandler>,
-
     segment_overrun: Entry<Handler>,
-
     pub invalid_tss: Entry<CodeHandler>,
-
     pub segment_not_present: Entry<CodeHandler>,
-
     pub stack: Entry<CodeHandler>,
-
     pub general_protection: Entry<CodeHandler>,
-
     pub page_fault: Entry<CodeHandler>,
-
     pub _reserved1: Entry<Handler>,
-
     pub x87_float_exception: Entry<Handler>,
-
     pub alignement_check: Entry<CodeHandler>,
-
     pub machine_check: Entry<DivergingCodeHandler>,
-
     pub simd_float: Entry<Handler>,
-
     pub virtualisation: Entry<Handler>,
-
     pub control_protection: Entry<CodeHandler>,
     _reserved2: [Entry<Handler>; 6],
-
     hypervisor_injection: Entry<Handler>, // amd64
     vmm_communication: Entry<Handler>,    // amd64
     security: Entry<Handler>,
-
     _reserved3: Entry<Handler>,
-
-    pub user: [Entry<Handler>; 256 - 32],
+    pub user: UserInterupts,
 }
+
+// pub struct UserInte
+
+#[derive(Debug, Copy, Clone)]
+#[repr(transparent)]
+pub struct UserInterupts {
+    entries: [Entry<Handler>; 255 - 32],
+}
+
+pub trait TrustedUserInterruptIndex: Into<usize> {}
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
@@ -156,7 +142,9 @@ impl InterruptDescriptorTable {
             vmm_communication: Entry::new(),
             security: Entry::new(),
             _reserved3: Entry::new(),
-            user: [Entry::new(); 256 - 32],
+            user: UserInterupts {
+                entries: [Entry::new(); 255 - 32],
+            },
         }
     }
 
@@ -172,6 +160,26 @@ impl InterruptDescriptorTable {
 impl Default for InterruptDescriptorTable {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl<T> core::ops::Index<T> for UserInterupts
+where
+    T: TrustedUserInterruptIndex,
+{
+    type Output = Entry<Handler>;
+
+    fn index(&self, index: T) -> &Self::Output {
+        &self.entries[index.into().saturating_sub(32)]
+    }
+}
+
+impl<T> core::ops::IndexMut<T> for UserInterupts
+where
+    T: TrustedUserInterruptIndex,
+{
+    fn index_mut(&mut self, index: T) -> &mut Self::Output {
+        &mut self.entries[index.into().saturating_sub(32)]
     }
 }
 

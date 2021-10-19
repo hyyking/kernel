@@ -1,6 +1,5 @@
 #![feature(asm)]
 #![feature(abi_x86_interrupt)]
-#![feature(const_panic)]
 #![no_std]
 
 pub mod address;

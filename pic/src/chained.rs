@@ -48,13 +48,16 @@ impl<const A: u8, const B: u8> ChainedPic<A, B> {
         }
     }
 
-    pub fn interupt_fn(&mut self, int_code: u8, f: impl Fn()) -> Result<(), UnhandledInterrupt> {
+    pub fn interupt_fn<T>(&mut self, int_code: T) -> Result<(), UnhandledInterrupt>
+    where
+        T: libx64::idt::TrustedUserInterruptIndex,
+    {
         let (master, slave) = match self.state {
             State::Init(ref mut m) => m,
-            State::Uninit(_) => panic!("attempted to hande a "),
+            State::Uninit(_) => panic!("Attempted to hande an unitialised PIC"),
             State::Raw(_) => unimplemented!(""),
         };
-        f();
+        let int_code: u8 = Into::<usize>::into(int_code) as u8;
         if master.handles_interrupt(int_code) || slave.handles_interrupt(int_code) {
             if slave.handles_interrupt(int_code) {
                 slave.eoi();

@@ -19,7 +19,7 @@ macro_rules! kprintln {
 
 pub fn _kprint(args: fmt::Arguments) {
     libx64::without_interrupts(|| {
-        DRIVER.lock().cursor().write_fmt(args).expect("kprint");
+        let _ = DRIVER.lock().cursor().write_fmt(args);
     })
 }
 
