@@ -45,13 +45,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "keyboard"
-version = "0.1.0"
-dependencies = [
- "bitflags",
-]
-
-[[package]]
 name = "libx64"
 version = "0.1.0"
 dependencies = [

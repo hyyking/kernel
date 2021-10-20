@@ -37,7 +37,7 @@ macro_rules! bitfield {
             }
 
             $crate::paste::paste! {
-                $vis fn [<as_ $T>](self) -> $T {
+                $vis const fn [<as_ $T>](self) -> $T {
                     self.0
                 }
             }

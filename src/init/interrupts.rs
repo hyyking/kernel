@@ -1,13 +1,20 @@
-use libx64::idt::{InterruptDescriptorTable, InterruptFrame};
+use libx64::{
+    idt::{InterruptDescriptorTable, InterruptFrame},
+    paging::PageFaultErrorCode,
+};
 
 use kcore::tables::idt::IstEntry;
 
 klazy! {
     pub ref static IDT: InterruptDescriptorTable = {
         let mut idt = InterruptDescriptorTable::new();
+
+        // Predefined Interrupts
         idt.breakpoint.register(int3);
         idt.double_fault.register(double_fault).set_stack_idx(IstEntry::DoubleFault);
+        idt.page_fault.register(page_fault);
 
+        // User Interrupts
         idt.user[user::IntIdx::Timer].register(user::timer);
         idt.user[user::IntIdx::Keyboard].register(user::keyboard);
 
@@ -21,6 +28,11 @@ pub extern "x86-interrupt" fn int3(f: InterruptFrame) {
 
 pub extern "x86-interrupt" fn double_fault(f: InterruptFrame, code: u64) -> ! {
     panic!("#DF (code: {}) {:#?}", code, f)
+}
+
+pub extern "x86-interrupt" fn page_fault(f: InterruptFrame, code: u64) {
+    let code = PageFaultErrorCode::from_bits_truncate(code);
+    panic!("#PF (code: {:?}) {:#?}", code, f)
 }
 
 #[interrupt_list::interrupt_list(IntIdx)]

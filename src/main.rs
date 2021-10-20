@@ -11,15 +11,28 @@ extern crate kcore;
 
 use core::panic::PanicInfo;
 
+use libx64::address::VirtualAddr;
+
 #[macro_use]
 pub mod drivers;
 #[macro_use]
 mod infra;
 mod init;
+mod memory;
 
-#[no_mangle]
-pub extern "C" fn _start() {
+bootloader::entry_point!(kmain);
+
+pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
     kprintln!("[OK] kernel loaded");
+
+    let pmo = VirtualAddr::new(bi.physical_memory_offset);
+    let _l4_map = unsafe {
+        memory::map_l4_at_offset(pmo)
+            .expect("mapping level 4 page")
+            .as_mut()
+    };
+
+    dbg!(memory::translate_address(VirtualAddr::new(0xb8000), pmo).unwrap());
 
     init::kinit();
     libx64::sti();

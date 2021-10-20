@@ -3,9 +3,11 @@
 #![no_std]
 
 pub mod address;
+pub mod control;
 pub mod descriptors;
 pub mod gdt;
 pub mod idt;
+pub mod paging;
 pub mod port;
 pub mod rflags;
 pub mod segments;
@@ -54,8 +56,13 @@ pub fn sti() {
     }
 }
 
-pub fn without_interrupts<R>(f: impl FnOnce() -> R) -> R {
-    let prev = rflags::rflags().contains(rflags::RFlags::INTERRUPT_FLAG);
+pub fn without_interrupts<F, R>(f: F) -> R
+where
+    F: FnOnce() -> R,
+{
+    use rflags::{rflags, RFlags};
+
+    let prev = rflags().contains(RFlags::INTERRUPT_FLAG);
     if prev {
         cli();
     }

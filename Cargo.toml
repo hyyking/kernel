@@ -5,14 +5,14 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [workspace]
-members = ["libx64", "kcore", "bitfield", "pic", "interrupt_list", "keyboard"]
+members = ["libx64", "kcore", "bitfield", "pic", "interrupt_list"]
 
 [features]
 qemu = []
 gdb = []
 
 [dependencies]
-bootloader = "0.9"
+bootloader = {version="0.9", features=["map_physical_memory"]}
 bitflags = {version="1", default-features=false}
 
 libx64 = {path = "libx64"}
