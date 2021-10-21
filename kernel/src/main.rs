@@ -31,14 +31,28 @@ pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
     kprintln!("[OK] kernel loaded");
 
     let pmo = VirtualAddr::new(bi.physical_memory_offset);
-    let _l4_map = unsafe {
-        page_mapper::map_l4_at_offset(pmo)
-            .expect("mapping level 4 page")
-            .as_mut()
-    };
-    dbg!(&bi);
 
-    dbg!(page_mapper::translate_address(VirtualAddr::new(0xb8000), pmo).unwrap());
+    let addr = VirtualAddr::new(0x201008);
+    // let addr = pmo;
+
+    unsafe {
+        use libx64::paging::table::{Level2, Level3, Level4, PageTable};
+        use page_mapper::OffsetWalker;
+
+        let walker = OffsetWalker::new(pmo);
+        let mut table = PageTable::new(libx64::control::cr3(), &walker);
+
+        let entry = &table.as_ref()[addr.page_table_index(Level4)];
+        let mut table = table.as_mut().walk_next(entry, &walker).expect("level3");
+
+        let entry = &table.as_ref()[addr.page_table_index(Level3)];
+        let mut table = table.as_mut().walk_next(entry, &walker).expect("level2");
+
+        let entry = &table.as_ref()[addr.page_table_index(Level2)];
+        let mut table = table.as_mut().walk_next(entry, &walker).expect("level1");
+
+        dbg!(table.as_mut().translate_addr(addr));
+    }
 
     init::kinit();
     libx64::sti();

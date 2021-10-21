@@ -1,6 +1,6 @@
 use crate::{
     address::{PhysicalAddr, VirtualAddr},
-    paging::{PageCheck, PageSize, PhysicalFrame},
+    paging::{frame::PhysicalFrame, Page4Kb},
 };
 
 use bitfield::bitfield;
@@ -22,10 +22,7 @@ bitfield! {
 }
 
 impl CR3 {
-    pub const fn frame<const N: u64>(&self) -> PhysicalFrame<N>
-    where
-        PageCheck<N>: PageSize,
-    {
+    pub const fn frame(&self) -> PhysicalFrame<Page4Kb> {
         PhysicalFrame::containing(PhysicalAddr::new(self.0 & 0x000F_FFFF_FFFF_F000))
     }
 }

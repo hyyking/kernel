@@ -1,45 +1,86 @@
 #![no_std]
 
-use core::cell::Cell;
 use core::ptr::NonNull;
 
-use libx64::address::{PhysicalAddr, VirtualAddr};
-use libx64::paging::PageTableLevel::*;
-use libx64::paging::{FrameError, Page4Kb, PageTable};
+use libx64::{
+    address::VirtualAddr,
+    paging::{
+        frame::{FrameTranslator, PhysicalFrame},
+        table::{Level2, Level3, Level4, PageLevel, PageTable},
+        NotGiantPageSize, NotHugePageSize, PageCheck, PageSize,
+    },
+};
 
-#[derive(Debug, Clone, Copy)]
-pub struct L4AlreadyMapped;
-
-pub fn map_l4_at_offset(offset: VirtualAddr) -> Result<NonNull<PageTable>, L4AlreadyMapped> {
-    static mut BASE: Cell<Option<NonNull<PageTable>>> = Cell::new(None);
-    unsafe {
-        match BASE.get() {
-            Some(_) => Err(L4AlreadyMapped),
-            None => {
-                let base_l4 = libx64::control::cr3().frame::<Page4Kb>();
-                let new = get_table_ptr(base_l4.ptr(), offset);
-                BASE.set(Some(new));
-                Ok(new)
-            }
-        }
-    }
-}
-
-pub fn translate_address(
-    addr: VirtualAddr,
+pub struct OffsetWalker<const N: u64>
+where
+    PageCheck<N>: PageSize,
+{
     offset: VirtualAddr,
-) -> Result<PhysicalAddr, FrameError> {
-    let mut frame = libx64::control::cr3().frame::<Page4Kb>();
-
-    for level in [Level4, Level3, Level2, Level1] {
-        let table = unsafe { get_table_ptr(frame.ptr(), offset).as_ref() };
-        frame = table[addr.page_table_index(level)].frame()?;
-    }
-    Ok(frame.ptr() + u64::from(addr.page_offset()))
 }
 
-unsafe fn get_table_ptr(table: PhysicalAddr, offset: VirtualAddr) -> NonNull<PageTable> {
-    (offset + table.as_u64())
-        .ptr::<PageTable>()
-        .expect("null pointer")
+impl<const N: u64> OffsetWalker<N>
+where
+    PageCheck<N>: PageSize,
+{
+    pub const fn new(offset: VirtualAddr) -> Self {
+        debug_assert!(!offset.is_null());
+        Self { offset }
+    }
+    unsafe fn translate(&self, frame: PhysicalFrame<N>) -> NonNull<()> {
+        (self.offset + frame.ptr().as_u64())
+            .ptr()
+            .expect("null frame pointer")
+    }
+}
+
+impl<const N: u64> FrameTranslator<(), N> for OffsetWalker<N>
+where
+    PageCheck<N>: PageSize,
+{
+    #[inline]
+    unsafe fn translate_frame(
+        &self,
+        frame: PhysicalFrame<N>,
+    ) -> NonNull<PageTable<<() as PageLevel>::Next>> {
+        self.translate(frame).cast()
+    }
+}
+
+impl<const N: u64> FrameTranslator<Level4, N> for OffsetWalker<N>
+where
+    PageCheck<N>: PageSize,
+{
+    #[inline]
+    unsafe fn translate_frame(
+        &self,
+        frame: PhysicalFrame<N>,
+    ) -> NonNull<PageTable<<Level4 as PageLevel>::Next>> {
+        self.translate(frame).cast()
+    }
+}
+
+impl<const N: u64> FrameTranslator<Level3, N> for OffsetWalker<N>
+where
+    PageCheck<N>: NotGiantPageSize,
+{
+    #[inline]
+    unsafe fn translate_frame(
+        &self,
+        frame: PhysicalFrame<N>,
+    ) -> NonNull<PageTable<<Level3 as PageLevel>::Next>> {
+        self.translate(frame).cast()
+    }
+}
+
+impl<const N: u64> FrameTranslator<Level2, N> for OffsetWalker<N>
+where
+    PageCheck<N>: NotHugePageSize,
+{
+    #[inline]
+    unsafe fn translate_frame(
+        &self,
+        frame: PhysicalFrame<N>,
+    ) -> NonNull<PageTable<<Level2 as PageLevel>::Next>> {
+        self.translate(frame).cast()
+    }
 }
