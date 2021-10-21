@@ -17,7 +17,7 @@ macro_rules! impl_register_handler {
                 pub fn register(&mut self, h: $h) -> &mut IgFlags {
                     self.set_target(VirtualAddr::new(h as u64));
                     self.set_selector(cs());
-                    self.flags_mut().set_present(u16::from(true));
+                    *self.flags_mut() = self.flags_mut().set_present(u16::from(true));
                     self.flags_mut()
                 }
             }

@@ -1,10 +1,7 @@
 #![no_std]
 
-extern crate bit_field;
 #[doc(hidden)]
 pub extern crate paste;
-
-pub use bit_field::BitField;
 
 #[macro_export]
 macro_rules! bitfield {
