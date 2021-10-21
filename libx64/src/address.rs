@@ -101,3 +101,35 @@ pub const fn align_up(addr: u64, align: u64) -> u64 {
     }
     addr
 }
+
+impl core::ops::Add<u64> for VirtualAddr {
+    type Output = VirtualAddr;
+
+    fn add(self, rhs: u64) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+
+impl core::ops::Sub<u64> for VirtualAddr {
+    type Output = VirtualAddr;
+
+    fn sub(self, rhs: u64) -> Self::Output {
+        Self(self.0 - rhs)
+    }
+}
+
+impl core::ops::Add<u64> for PhysicalAddr {
+    type Output = PhysicalAddr;
+
+    fn add(self, rhs: u64) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+
+impl core::ops::Sub<u64> for PhysicalAddr {
+    type Output = PhysicalAddr;
+
+    fn sub(self, rhs: u64) -> Self::Output {
+        Self(self.0 - rhs)
+    }
+}

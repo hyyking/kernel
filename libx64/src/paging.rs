@@ -156,6 +156,13 @@ impl PageEntry {
         PhysicalAddr::new(self.0 & 0x000F_FFFF_FFFF_F000)
     }
 
+    pub const fn set_frame<const N: u64>(self, addr: PhysicalFrame<N>) -> Self
+    where
+        PageCheck<N>: PageSize,
+    {
+        self.set_address(addr.ptr().as_u64())
+    }
+
     pub const fn frame<const N: u64>(&self) -> Result<PhysicalFrame<N>, FrameError>
     where
         PageCheck<N>: PageSize,
@@ -174,8 +181,19 @@ impl PageEntry {
 
 pub trait PageSize {}
 
+#[allow(non_upper_case_globals)]
+pub const Page4Kb: u64 = 4096;
+
+#[allow(non_upper_case_globals)]
+pub const Page2Mb: u64 = Page4Kb * 512;
+
+#[allow(non_upper_case_globals)]
+pub const Page1Gb: u64 = Page2Mb * 512;
+
 pub struct PageCheck<const N: u64>;
-impl PageSize for PageCheck<4096> {}
+impl PageSize for PageCheck<Page4Kb> {}
+impl PageSize for PageCheck<Page2Mb> {}
+impl PageSize for PageCheck<Page1Gb> {}
 
 #[derive(Debug, Clone, Copy)]
 pub struct PhysicalFrame<const N: u64>
@@ -194,15 +212,9 @@ where
             addr: addr.align_down(N),
         }
     }
-}
 
-impl<const N: u64> core::ops::Deref for PhysicalFrame<N>
-where
-    PageCheck<N>: PageSize,
-{
-    type Target = PhysicalAddr;
-    fn deref(&self) -> &Self::Target {
-        &self.addr
+    pub const fn ptr(self) -> PhysicalAddr {
+        self.addr
     }
 }
 

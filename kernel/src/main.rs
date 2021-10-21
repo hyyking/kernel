@@ -37,6 +37,7 @@ pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
             .expect("mapping level 4 page")
             .as_mut()
     };
+    dbg!(&bi);
 
     dbg!(memory::translate_address(VirtualAddr::new(0xb8000), pmo).unwrap());
 
