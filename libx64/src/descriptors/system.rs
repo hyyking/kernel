@@ -1,4 +1,4 @@
-use bitfield::{bitfield, BitField};
+use bitfield::bitfield;
 
 use crate::address::VirtualAddr;
 use crate::segments::TaskStateSegment;
@@ -58,21 +58,21 @@ impl SystemSegmentDescriptor {
         self.base_higher = (addr >> 32) as u32;
     }
 
-    pub fn get_limit(&self) -> u32 {
+    pub const fn get_limit(&self) -> u32 {
         self.limit_low as u32 | ((self.limit_flags.get_limit_high() as u32) << 16)
     }
 
     pub fn set_limit(&mut self, limit: u32) {
         self.limit_low = limit as u16;
-        self.limit_flags.set_limit_high((limit >> 16) as u8);
+        self.limit_flags = self.limit_flags.set_limit_high((limit >> 16) as u8);
     }
 
     pub fn set_type(&mut self, ty: SystemSegmentType) {
-        self.flags.set_ss_type(ty as u8);
+        self.flags = self.flags.set_ss_type(ty as u8);
     }
 
     pub fn set_present(&mut self) {
-        self.flags.set_presence(1);
+        self.flags = self.flags.set_presence(1);
     }
 }
 

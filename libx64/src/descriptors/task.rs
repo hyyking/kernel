@@ -1,4 +1,4 @@
-use bitfield::{bitfield, BitField};
+use bitfield::bitfield;
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]

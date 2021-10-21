@@ -1,6 +1,6 @@
 use crate::descriptors::system::SystemSegmentType;
 
-use bitfield::{bitfield, BitField};
+use bitfield::bitfield;
 
 #[repr(C, packed)]
 pub struct CallGateDescriptor {

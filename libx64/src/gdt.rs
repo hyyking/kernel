@@ -76,10 +76,9 @@ impl GlobalDescriptorTable {
                 idx
             },
         };
-        let mut ss = SegmentSelector::zero();
-        ss.set_index(idx);
-        ss.set_rpl(u16::from(Privilege::Ring0));
-        ss
+        SegmentSelector::zero()
+            .set_index(idx)
+            .set_rpl(u16::from(Privilege::Ring0))
     }
     fn push(&mut self, value: u64) -> u16 {
         let next = self.at;

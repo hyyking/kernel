@@ -1,7 +1,7 @@
 use crate::address::VirtualAddr;
 use crate::descriptors::system::SystemSegmentType;
 
-use bitfield::{bitfield, BitField};
+use bitfield::bitfield;
 
 #[derive(Clone, Copy)]
 #[repr(C)]
@@ -58,7 +58,7 @@ bitfield! {
 impl IgFlags {
     #[inline]
     pub fn set_stack_idx(&mut self, val: impl Into<IstIndex>) -> &mut Self {
-        self.set_ist(val.into() as u16);
+        *self = self.set_ist(val.into() as u16);
         self
     }
 }

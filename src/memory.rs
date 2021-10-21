@@ -27,7 +27,7 @@ pub fn translate_address(
     addr: VirtualAddr,
     offset: VirtualAddr,
 ) -> Result<PhysicalAddr, FrameError> {
-    let mut frame = libx64::control::cr3().frame();
+    let mut frame = libx64::control::cr3().frame::<4096>();
     let levels = [Level4, Level3, Level2, Level1];
 
     for level in levels {

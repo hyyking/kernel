@@ -78,8 +78,9 @@ pub fn remap_init<const A: u8, const B: u8>(
     let mut wait_port = WPort::<u8>::new(0x80);
     let mut wait = || unsafe { wait_port.write(0) };
 
-    let mut icw1 = ICW1::zero();
-    icw1.set_ic4(u8::from(true)).set_init(u8::from(true));
+    let icw1 = ICW1::zero()
+        .set_ic4(u8::from(true))
+        .set_init(u8::from(true));
 
     let master = master.write_icw1(icw1);
     wait();
@@ -96,8 +97,7 @@ pub fn remap_init<const A: u8, const B: u8>(
     let slave = slave.write_icw3(ICW3(2));
     wait();
 
-    let mut icw4 = ICW4::zero();
-    icw4.set_x86mode(1);
+    let icw4 = ICW4::zero().set_x86mode(1);
 
     let master = master.write_icw4(icw4);
     wait();

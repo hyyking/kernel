@@ -1,6 +1,4 @@
-use core::marker::PhantomData;
-
-use bitfield::{bitfield, BitField};
+use bitfield::bitfield;
 
 use crate::address::PhysicalAddr;
 
@@ -158,45 +156,50 @@ impl PageEntry {
         PhysicalAddr::new(self.0 & 0x000F_FFFF_FFFF_F000)
     }
 
-    pub const fn frame(&self) -> Result<PhysicalFrame, FrameError> {
-        let a = self.as_u64() as u8;
-        if (a & 1) == 0 {
+    pub const fn frame<const N: u64>(&self) -> Result<PhysicalFrame<N>, FrameError>
+    where
+        PageCheck<N>: PageSize,
+    {
+        if self.get_present() == 0 {
             Err(FrameError::EntryMissing)
-        } else if (a & (1 << 7)) != 0 {
+        } else if self.get_page_size() != 0 {
             Err(FrameError::HugePageNotSupported)
         } else {
             Ok(PhysicalFrame {
                 addr: self.address(),
-                _m: PhantomData,
             })
         }
     }
 }
 
-pub trait PageSize {
-    const SIZE: u64;
-}
-pub enum Frame4Kib {}
-impl PageSize for Frame4Kib {
-    const SIZE: u64 = 4096;
-}
+pub trait PageSize {}
+
+pub struct PageCheck<const N: u64>;
+impl PageSize for PageCheck<4096> {}
 
 #[derive(Debug, Clone, Copy)]
-pub struct PhysicalFrame<F: PageSize = Frame4Kib> {
+pub struct PhysicalFrame<const N: u64>
+where
+    PageCheck<N>: PageSize,
+{
     addr: PhysicalAddr,
-    _m: PhantomData<F>,
 }
 
-impl<F: PageSize> PhysicalFrame<F> {
-    pub fn containing(addr: PhysicalAddr) -> Self {
+impl<const N: u64> PhysicalFrame<N>
+where
+    PageCheck<N>: PageSize,
+{
+    pub const fn containing(addr: PhysicalAddr) -> Self {
         Self {
-            addr: addr.align_down(F::SIZE),
-            _m: PhantomData,
+            addr: addr.align_down(N),
         }
     }
 }
 
-impl<F: PageSize> core::ops::Deref for PhysicalFrame<F> {
+impl<const N: u64> core::ops::Deref for PhysicalFrame<N>
+where
+    PageCheck<N>: PageSize,
+{
     type Target = PhysicalAddr;
     fn deref(&self) -> &Self::Target {
         &self.addr

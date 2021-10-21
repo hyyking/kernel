@@ -28,6 +28,8 @@ macro_rules! bitfield {
         $vis struct $bitfield ($T);
 
         impl $bitfield {
+            const BITS: usize = ::core::mem::size_of::<$T>() * 8;
+
             $vis const fn zero() -> Self {
                 Self(0)
             }
@@ -47,8 +49,10 @@ macro_rules! bitfield {
                 $(#[$inner $($args)*])*
                 ///
                 #[doc = concat!(" ", stringify!(_Bitfield_: This field covers the exclusive range $idx))]
-                $ivis fn [<get_ $bit>](&self) -> $T {
-                    self.0.get_bits($idx)
+                $ivis const fn [<get_ $bit>](&self) -> $T {
+                    const RANGE: (usize, usize) = $crate::decompose_range($idx);
+                    let bits = self.0 << (Self::BITS - RANGE.1) >> (Self::BITS - RANGE.1);
+                    bits >> RANGE.0
                 }
             }
 
@@ -58,9 +62,12 @@ macro_rules! bitfield {
                 /// ## Range:
                 #[doc = concat!(" ", stringify!(This field covers the range: $idx))]
                 ///
-                $ivis fn [<set_ $bit>](&mut self, val: $T) -> &mut Self {
-                    self.0.set_bits($idx, val);
-                    self
+                $ivis const fn [<set_ $bit>](self, val: $T) -> Self {
+                    const RANGE: (usize, usize) = $crate::decompose_range($idx);
+                    let bitmask = !(!0 << (Self::BITS - RANGE.1) >>
+                                (Self::BITS - RANGE.1) >>
+                                RANGE.0 << RANGE.0);
+                    Self((self.0 & bitmask) | (val << RANGE.0))
                 }
             }
         )*
@@ -70,7 +77,7 @@ macro_rules! bitfield {
         impl ::core::fmt::Debug for $bitfield {
             fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> Result<(), ::core::fmt::Error> {
                 let mut s = f.debug_struct(stringify!($bitfield));
-                let a = s.field("bin", &format_args!("{:#0b}", self.0));
+                let a = s.field(".0", &format_args!("{:#0b}", self.0));
                 $(
                     $crate::paste::paste! {
                         let a = a.field(stringify!( > $bit), &{ self.[<get_ $bit>]() });
@@ -80,4 +87,8 @@ macro_rules! bitfield {
             }
         }
     }
+}
+
+pub const fn decompose_range(range: core::ops::Range<usize>) -> (usize, usize) {
+    (range.start, range.end)
 }

@@ -1,4 +1,4 @@
-use bitfield::{bitfield, BitField};
+use bitfield::bitfield;
 
 bitfield! {
     /// # Initialization Control Word 1 (ICW1)

@@ -1,6 +1,6 @@
 use crate::{address::VirtualAddr, descriptors::interrupt::IstIndex};
 
-use bitfield::{bitfield, BitField};
+use bitfield::bitfield;
 
 bitfield! {
     #[derive(Copy, Clone)]

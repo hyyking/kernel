@@ -13,11 +13,12 @@ klazy! {
 
         gdt.add_entry(GdtNull);
         let code_segment = gdt.add_entry(CodeSegmentDescriptor::kernel_x64());
-        let task_state = gdt.add_entry(SystemSegmentDescriptor::from(&*TSS));
+        let task_state =   gdt.add_entry(SystemSegmentDescriptor::from(&*TSS));
+
 
         (gdt, Selectors {
-            code_segment,
-            task_state
+                code_segment,
+                task_state
         })
     };
 }
@@ -27,11 +28,14 @@ klazy! {
         let mut tss = TaskStateSegment::zero();
 
         tss.ist[IstEntry::DoubleFault] = {
-            const STACK_SIZE: usize = 4096 * 8; // 4Mb stack
-            static mut STACK: [u8; STACK_SIZE] = [0; STACK_SIZE];
+            const STACK_SIZE: usize = 4096 * 8; // 8Kib stack
+
+            #[repr(align(16))]
+            pub struct Stack([u8; STACK_SIZE]);
+            static mut STACK: Stack = Stack([0; STACK_SIZE]);
 
             // SAFETY: Stack grows down
-            VirtualAddr::from_ptr(unsafe { STACK.as_ptr().add(STACK_SIZE) })
+            VirtualAddr::from_ptr(unsafe { STACK.0.as_ptr().add(STACK_SIZE) })
         };
 
         tss

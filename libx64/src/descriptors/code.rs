@@ -1,4 +1,4 @@
-use bitfield::{bitfield, BitField};
+use bitfield::bitfield;
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
@@ -12,7 +12,7 @@ pub struct CodeSegmentDescriptor {
 }
 
 impl CodeSegmentDescriptor {
-    pub fn empty() -> Self {
+    pub const fn empty() -> Self {
         Self {
             limit_low: 0,
             base_low: 0,
@@ -23,21 +23,23 @@ impl CodeSegmentDescriptor {
         }
     }
 
-    pub fn kernel_x64() -> Self {
+    pub const fn kernel_x64() -> Self {
         let mut this = Self::empty();
         this.limit_low = u16::MAX;
-        this.limit_flags.set_limit_high(0b1111);
 
-        this.flags.set_readable(1);
-        this.flags.set_access(1);
-        this.flags.set_presence(1);
+        this.flags = this
+            .flags
+            .set_readable(1)
+            .set_access(1)
+            .set_presence(1)
+            .set_res1(1)
+            .set_res2(1);
 
-        this.flags.set_res1(1);
-        this.flags.set_res2(1);
-
-        this.limit_flags.set_granularity(1);
-
-        this.limit_flags.set_long(1);
+        this.limit_flags = this
+            .limit_flags
+            .set_granularity(1)
+            .set_long(1)
+            .set_limit_high(0b1111);
 
         this
     }
