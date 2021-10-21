@@ -38,15 +38,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "libx64"
-version = "0.1.0"
-dependencies = [
- "bitfield",
- "bitflags",
-]
-
-[[package]]
-name = "os"
+name = "kernel"
 version = "0.1.0"
 dependencies = [
  "bitflags",
@@ -55,6 +47,14 @@ dependencies = [
  "kcore",
  "libx64",
  "pic",
+]
+
+[[package]]
+name = "libx64"
+version = "0.1.0"
+dependencies = [
+ "bitfield",
+ "bitflags",
 ]
 
 [[package]]

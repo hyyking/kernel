@@ -1,0 +1,25 @@
+[package]
+name = "kernel"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name="kernel"
+test=false
+
+[features]
+qemu = []
+gdb = []
+
+[dependencies]
+bootloader = {version="0.9", features=["map_physical_memory"]}
+bitflags = {version="1", default-features=false}
+
+libx64 = {path = "../libx64"}
+kcore = {path = "../kcore"}
+pic = {path = "../pic"}
+interrupt_list = {path = "../interrupt_list", features=["libx64"]}
+
+[package.metadata.bootimage]
+run-args = ["-serial", "stdio"]
+test-args = ["-serial", "stdio"]

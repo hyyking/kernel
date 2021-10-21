@@ -50,6 +50,7 @@ pub fn interrupt_list(attrs: TokenStream, item: TokenStream) -> TokenStream {
     let libx64_impl = quote::quote! {
         impl libx64::idt::TrustedUserInterruptIndex for #enum_name {}
     };
+
     #[cfg(not(feature = "libx64"))]
     let libx64_impl = quote::quote! {};
 
@@ -119,13 +120,11 @@ pub fn user_interrupt(initial_attr: TokenStream, item: TokenStream) -> TokenStre
     temp
 }
 
-#[derive(Debug)]
 struct InterruptInfo {
     ident: syn::Ident,
     number: Option<u8>,
 }
 
-#[derive(Debug)]
 struct MacroState {
     module: (syn::Visibility, syn::Ident),
     interrupts: Vec<InterruptInfo>,

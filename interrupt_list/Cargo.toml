@@ -12,6 +12,6 @@ libx64 = []
 proc-macro=true
 
 [dependencies]
-syn = {version="1", features=["full", "extra-traits"]}
+syn = {version="1", features=["full"]}
 quote = {version="1"}
 proc-macro2 = {version="1"}
