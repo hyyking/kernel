@@ -19,6 +19,7 @@ bitflags = {version="1", default-features=false}
 libx64 = {path = "../libx64"}
 kcore = {path = "../kcore"}
 interrupt_list = {path = "../interrupt_list", features=["libx64"]}
+page_mapper = {path = "../page_mapper"}
 
 log = {version="0.4", default-features=false, features=["max_level_trace"]}
 qemu_logger = {path = "../qemu_logger"}

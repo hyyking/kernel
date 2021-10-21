@@ -22,7 +22,6 @@ use libx64::address::VirtualAddr;
 #[macro_use]
 mod infra;
 mod init;
-mod memory;
 
 bootloader::entry_point!(kmain);
 
@@ -33,13 +32,13 @@ pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
 
     let pmo = VirtualAddr::new(bi.physical_memory_offset);
     let _l4_map = unsafe {
-        memory::map_l4_at_offset(pmo)
+        page_mapper::map_l4_at_offset(pmo)
             .expect("mapping level 4 page")
             .as_mut()
     };
     dbg!(&bi);
 
-    dbg!(memory::translate_address(VirtualAddr::new(0xb8000), pmo).unwrap());
+    dbg!(page_mapper::translate_address(VirtualAddr::new(0xb8000), pmo).unwrap());
 
     init::kinit();
     libx64::sti();

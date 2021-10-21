@@ -7,6 +7,7 @@ members = [
     "bitfield",
     "interrupt_list",
     "qemu_logger",
+    "page_mapper",
     
     "drivers/pic",
     "drivers/vga",
