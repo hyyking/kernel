@@ -1,7 +1,7 @@
 use crate::{
     address::PhysicalAddr,
     paging::{
-        frame::{FrameError, PhysicalFrame},
+        frame::{FrameError, FrameKind, PhysicalFrame},
         table::PageLevel,
         PageCheck, PageSize,
     },
@@ -135,16 +135,13 @@ impl<L: PageLevel> PageEntry<L> {
         }
     }
 
-    pub fn frame<const N: u64>(&self) -> Result<PhysicalFrame<N>, FrameError>
-    where
-        PageCheck<N>: PageSize,
-    {
+    pub fn frame(&self) -> Result<FrameKind, FrameError> {
         if self.raw.get_present() == 0 {
             Err(FrameError::EntryMissing)
         } else if self.raw.get_page_size() != 0 {
-            Err(FrameError::HugePageNotSupported)
+            Ok(FrameKind::Huge(self.address()))
         } else {
-            Ok(PhysicalFrame::containing(self.address()))
+            Ok(FrameKind::Normal(PhysicalFrame::containing(self.address())))
         }
     }
 }

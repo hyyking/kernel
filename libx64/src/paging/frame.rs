@@ -4,7 +4,7 @@ use crate::{
     address::PhysicalAddr,
     paging::{
         table::{PageLevel, PageTable},
-        PageCheck, PageSize,
+        Page4Kb, PageCheck, PageSize,
     },
 };
 
@@ -18,8 +18,13 @@ where
 
 #[derive(Debug)]
 pub enum FrameError {
-    HugePageNotSupported,
+    UnexpectedHugePage,
     EntryMissing,
+}
+
+pub enum FrameKind {
+    Normal(PhysicalFrame<Page4Kb>),
+    Huge(PhysicalAddr),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -42,5 +47,34 @@ where
 
     pub const fn ptr(self) -> PhysicalAddr {
         self.addr
+    }
+}
+
+impl FrameKind {
+    /// Returns `true` if the frame kind is [`Huge`].
+    ///
+    /// [`Huge`]: FrameKind::Huge
+    pub fn is_huge(&self) -> bool {
+        matches!(self, Self::Huge(..))
+    }
+
+    pub unsafe fn into_level3_huge_page(
+        self,
+        _page: &super::table::PageTable<super::table::Level3>,
+    ) -> Option<PhysicalFrame<{ super::Page1Gb }>> {
+        match self {
+            Self::Normal(_) => None,
+            Self::Huge(addr) => Some(PhysicalFrame::containing(addr)),
+        }
+    }
+
+    pub unsafe fn into_level2_huge_page(
+        self,
+        _page: &super::table::PageTable<super::table::Level2>,
+    ) -> Option<PhysicalFrame<{ super::Page2Mb }>> {
+        match self {
+            Self::Normal(_) => None,
+            Self::Huge(addr) => Some(PhysicalFrame::containing(addr)),
+        }
     }
 }

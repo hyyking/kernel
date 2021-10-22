@@ -33,25 +33,15 @@ pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
     let pmo = VirtualAddr::new(bi.physical_memory_offset);
 
     let addr = VirtualAddr::new(0x201008);
-    // let addr = pmo;
 
     unsafe {
-        use libx64::paging::table::{Level2, Level3, Level4, PageTable};
-        use page_mapper::OffsetWalker;
+        use page_mapper::{offset::OffsetWalker, PageWalker};
 
-        let walker = OffsetWalker::new(pmo);
-        let mut table = PageTable::new(libx64::control::cr3(), &walker);
+        let mut walker = PageWalker::new(OffsetWalker::new(pmo));
 
-        let entry = &table.as_ref()[addr.page_table_index(Level4)];
-        let mut table = table.as_mut().walk_next(entry, &walker).expect("level3");
-
-        let entry = &table.as_ref()[addr.page_table_index(Level3)];
-        let mut table = table.as_mut().walk_next(entry, &walker).expect("level2");
-
-        let entry = &table.as_ref()[addr.page_table_index(Level2)];
-        let mut table = table.as_mut().walk_next(entry, &walker).expect("level1");
-
-        dbg!(table.as_mut().translate_addr(addr));
+        dbg!(walker.translate_addr(addr).unwrap());
+        dbg!(walker.translate_addr(pmo).unwrap());
+        dbg!(walker.translate_addr(VirtualAddr::new(0xb8000)).unwrap());
     }
 
     init::kinit();
