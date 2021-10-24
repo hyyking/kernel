@@ -74,9 +74,9 @@ impl OffsetMapper {
                 .as_mut();
 
             let entry = &mut level_1[addr.page_table_index(Level1)];
-            debug_assert!(entry.is_present());
             entry.set_flags(flags);
-            *entry = entry.set_frame(frame);
+            entry.set_frame(frame);
+            debug_assert!(entry.is_present());
         }
 
         Ok(())

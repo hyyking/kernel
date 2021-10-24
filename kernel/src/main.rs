@@ -37,6 +37,10 @@ pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
     libx64::sti();
 
     unsafe {
+        use libx64::{
+            address::PhysicalAddr,
+            paging::{entry::Flags, frame::PhysicalFrame, page::Page, Page4Kb},
+        };
         use page_mapper::OffsetMapper;
 
         let mut walker = OffsetMapper::new(pmo);
@@ -51,9 +55,6 @@ pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
 
         let mut alloc = pagealloc::BootInfoFrameAllocator::init(&bi.memory_map);
 
-        use libx64::address::PhysicalAddr;
-        use libx64::paging::{entry::Flags, frame::PhysicalFrame, page::Page, Page4Kb};
-
         let page: Page<Page4Kb> = Page::containing(VirtualAddr::new(0));
         let frame: PhysicalFrame<Page4Kb> = PhysicalFrame::containing(PhysicalAddr::new(0xb8000));
         walker
@@ -64,6 +65,7 @@ pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
                 &mut alloc,
             )
             .unwrap();
+
         libx64::paging::invalidate_tlb();
 
         dbg!(walker.try_translate_addr(page.ptr()).unwrap());

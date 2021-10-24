@@ -18,7 +18,7 @@ impl FrameAllocator<Page4Kb> for BootInfoFrameAllocator {
 }
 
 impl BootInfoFrameAllocator {
-    pub unsafe fn init(memory_map: &'static MemoryMap) -> Self {
+    pub fn init(memory_map: &'static MemoryMap) -> Self {
         BootInfoFrameAllocator {
             memory_map,
             next: 0,
