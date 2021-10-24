@@ -34,3 +34,9 @@ pub fn cr3() -> CR3 {
         CR3::raw(value)
     }
 }
+
+pub fn set_cr3(cr3: CR3) {
+    unsafe {
+        asm!("mov cr3, {}", in(reg) cr3.as_u64(), options(nomem, nostack, preserves_flags));
+    }
+}

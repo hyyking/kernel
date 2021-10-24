@@ -1,5 +1,8 @@
+use crate::address::VirtualAddr;
+
 pub mod entry;
 pub mod frame;
+pub mod page;
 pub mod table;
 
 #[allow(non_upper_case_globals)]
@@ -14,11 +17,16 @@ pub const Page1Gb: u64 = Page2Mb * 512;
 pub trait PageSize {}
 pub trait NotHugePageSize: PageSize {}
 pub trait NotGiantPageSize: PageSize {}
+
 pub struct PageCheck<const N: u64>;
-impl PageSize for PageCheck<Page4Kb> {}
+
 impl NotHugePageSize for PageCheck<Page4Kb> {}
+impl NotHugePageSize for PageCheck<Page1Gb> {}
+
 impl NotGiantPageSize for PageCheck<Page4Kb> {}
 impl NotGiantPageSize for PageCheck<Page2Mb> {}
+
+impl PageSize for PageCheck<Page4Kb> {}
 impl PageSize for PageCheck<Page2Mb> {}
 impl PageSize for PageCheck<Page1Gb> {}
 
@@ -67,4 +75,18 @@ bitflags::bitflags! {
         /// encountering an RMP violation (AMD-only).
         const RMP = 1 << 31;
     }
+}
+
+#[inline]
+pub fn invlpg(addr: VirtualAddr) {
+    unsafe {
+        asm!("invlpg [{}]", in(reg) addr.as_u64(), options(nostack, preserves_flags));
+    }
+}
+
+/// Invalidate the TLB completely by reloading the CR3 register.
+#[inline]
+pub fn invalidate_tlb() {
+    let cr3 = crate::control::cr3();
+    crate::control::set_cr3(cr3)
 }

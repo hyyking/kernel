@@ -4,11 +4,13 @@ use crate::{
     address::{PhysicalAddr, VirtualAddr},
     control::CR3,
     paging::{
-        entry::PageEntry,
-        frame::{FrameError, FrameKind, FrameTranslator},
-        NotGiantPageSize, NotHugePageSize, Page4Kb, PageCheck, PageSize,
+        entry::{MappedLevel2Page, MappedLevel3Page, PageEntry},
+        frame::{FrameError, FrameTranslator, PhysicalFrame},
+        Page4Kb,
     },
 };
+
+use super::{Page1Gb, Page2Mb};
 
 #[derive(Debug)]
 #[repr(C, align(4096))]
@@ -17,73 +19,108 @@ pub struct PageTable<LEVEL: PageLevel> {
     _m: core::marker::PhantomData<LEVEL>,
 }
 
+pub enum Level3Walk {
+    PageTable(NonNull<PageTable<Level2>>),
+    HugePage(PhysicalFrame<Page1Gb>),
+}
+
+pub enum Level2Walk {
+    PageTable(NonNull<PageTable<Level1>>),
+    HugePage(PhysicalFrame<Page2Mb>),
+}
+
+impl Level2Walk {
+    pub fn try_into_table(self) -> Result<NonNull<PageTable<Level1>>, FrameError> {
+        match self {
+            Level2Walk::PageTable(table) => Ok(table),
+            Level2Walk::HugePage(_) => Err(FrameError::UnexpectedHugePage),
+        }
+    }
+}
+
+impl Level3Walk {
+    pub fn try_into_table(self) -> Result<NonNull<PageTable<Level2>>, FrameError> {
+        match self {
+            Level3Walk::PageTable(table) => Ok(table),
+            Level3Walk::HugePage(_) => Err(FrameError::UnexpectedHugePage),
+        }
+    }
+}
+
 impl PageTable<Level4> {
     pub fn new(cr: CR3, translator: &dyn FrameTranslator<(), Page4Kb>) -> NonNull<Self> {
         unsafe { translator.translate_frame(cr.frame()) }
     }
 
-    pub fn walk_next<const P: u64>(
-        &self,
+    pub fn walk_next(
         cr: &PageEntry<Level4>,
         translator: &dyn FrameTranslator<Level4, Page4Kb>,
-    ) -> Result<NonNull<PageTable<Level3>>, FrameError>
-    where
-        PageCheck<P>: PageSize,
-    {
-        let frame = match cr.frame()? {
-            FrameKind::Normal(frame) => frame,
-            FrameKind::Huge(_) => return Err(FrameError::UnexpectedHugePage),
-        };
-        unsafe { Ok(translator.translate_frame(frame)) }
+    ) -> Result<NonNull<PageTable<Level3>>, FrameError> {
+        unsafe { Ok(translator.translate_frame(cr.frame()?)) }
     }
 }
 
 impl PageTable<Level3> {
-    pub fn walk_next<const P: u64>(
-        &self,
+    pub fn walk_next(
         cr: &PageEntry<Level3>,
         translator: &dyn FrameTranslator<Level3, Page4Kb>,
-    ) -> Result<Option<NonNull<PageTable<Level2>>>, FrameError>
-    where
-        PageCheck<P>: NotGiantPageSize,
-    {
-        let frame = match cr.frame()? {
-            FrameKind::Normal(frame) => frame,
-            FrameKind::Huge(_) => return Ok(None),
-        };
-        unsafe { Ok(Some(translator.translate_frame(frame))) }
+    ) -> Result<Level3Walk, FrameError> {
+        match cr.frame()? {
+            MappedLevel3Page::Page4Kb(frame) => unsafe {
+                Ok(Level3Walk::PageTable(translator.translate_frame(frame)))
+            },
+            MappedLevel3Page::Page1Gb(frame) => Ok(Level3Walk::HugePage(frame)),
+        }
+    }
+
+    /// # Safety:
+    ///
+    /// The virtual address must have a valid 1Gb page offset
+    pub unsafe fn translate_with_frame(
+        c: PhysicalFrame<Page1Gb>,
+        virt: VirtualAddr,
+    ) -> PhysicalAddr {
+        c.ptr() + u64::from(virt.page_offset())
     }
 }
 
 impl PageTable<Level2> {
-    pub fn walk_next<const P: u64>(
-        &self,
+    pub fn walk_next(
         cr: &PageEntry<Level2>,
         translator: &dyn FrameTranslator<Level2, Page4Kb>,
-    ) -> Result<Option<NonNull<PageTable<Level1>>>, FrameError>
-    where
-        PageCheck<P>: NotHugePageSize,
-    {
-        let frame = match cr.frame()? {
-            FrameKind::Normal(frame) => frame,
-            FrameKind::Huge(_) => return Ok(None),
-        };
-        unsafe { Ok(Some(translator.translate_frame(frame))) }
+    ) -> Result<Level2Walk, FrameError> {
+        match cr.frame()? {
+            MappedLevel2Page::Page4Kb(frame) => unsafe {
+                Ok(Level2Walk::PageTable(translator.translate_frame(frame)))
+            },
+            MappedLevel2Page::Page2Mb(frame) => Ok(Level2Walk::HugePage(frame)),
+        }
+    }
+
+    /// # Safety:
+    ///
+    /// The virtual address must have a valid 2Mb page offset
+    pub unsafe fn translate_with_frame(
+        c: PhysicalFrame<Page2Mb>,
+        virt: VirtualAddr,
+    ) -> PhysicalAddr {
+        c.ptr() + u64::from(virt.page_offset())
     }
 }
 
-impl<LEVEL: PageLevel> PageTable<LEVEL> {
-    pub unsafe fn translate_addr(
+impl PageTable<Level1> {
+    pub fn translate_with_index(
         &self,
-        idx: PageTableIndex<LEVEL>,
+        idx: PageTableIndex<Level1>,
         virt: VirtualAddr,
     ) -> Result<PhysicalAddr, FrameError> {
-        match self[idx].frame()? {
-            FrameKind::Normal(frame) => Ok(frame.ptr() + u64::from(virt.page_offset())),
-            FrameKind::Huge(ptr) => Ok(ptr + u64::from(virt.page_offset())),
-        }
+        self[idx]
+            .frame()
+            .map(|f| f.ptr() + u64::from(virt.page_offset()))
     }
 }
+
+impl<LEVEL: PageLevel> PageTable<LEVEL> {}
 
 #[derive(Clone, Copy)]
 #[repr(transparent)]
@@ -142,33 +179,28 @@ pub struct Level4;
 impl PageLevel for () {
     const VALUE: u64 = 0;
     type Next = Level4;
-    type Prev = !;
+    type Prev = ();
 }
-
 impl PageLevel for Level4 {
     const VALUE: u64 = 4;
     type Next = Level3;
     type Prev = ();
 }
-
 impl PageLevel for Level3 {
     const VALUE: u64 = 3;
     type Next = Level2;
     type Prev = Level4;
 }
-
 impl PageLevel for Level2 {
     const VALUE: u64 = 2;
     type Next = Level1;
     type Prev = Level3;
 }
-
 impl PageLevel for Level1 {
     const VALUE: u64 = 1;
     type Next = !;
     type Prev = Level2;
 }
-
 impl PageLevel for ! {
     const VALUE: u64 = 0;
     type Next = !;

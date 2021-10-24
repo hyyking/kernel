@@ -24,10 +24,10 @@ where
         debug_assert!(!offset.is_null());
         Self { offset }
     }
-    unsafe fn translate(&self, frame: PhysicalFrame<N>) -> NonNull<()> {
+    pub unsafe fn translate(&self, frame: PhysicalFrame<N>) -> NonNull<()> {
         (self.offset + frame.ptr().as_u64())
             .ptr()
-            .expect("null frame pointer")
+            .expect("null frame pointer and offset")
     }
 }
 
@@ -59,7 +59,7 @@ where
 
 impl<const N: u64> FrameTranslator<Level3, N> for OffsetWalker<N>
 where
-    PageCheck<N>: NotGiantPageSize,
+    PageCheck<N>: NotHugePageSize,
 {
     #[inline]
     unsafe fn translate_frame(
@@ -72,7 +72,7 @@ where
 
 impl<const N: u64> FrameTranslator<Level2, N> for OffsetWalker<N>
 where
-    PageCheck<N>: NotHugePageSize,
+    PageCheck<N>: NotGiantPageSize,
 {
     #[inline]
     unsafe fn translate_frame(
