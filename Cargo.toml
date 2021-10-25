@@ -4,11 +4,11 @@ members = [
     "libx64",
     "kcore",
 
-    "bitfield",
-    "interrupt_list",
-    "qemu_logger",
-    "page_mapper",
-    
+    "utils/bitfield",
+    "utils/interrupt_list",
+    "utils/qemu_logger",
+
+    "drivers/page_mapper",
     "drivers/pic",
     "drivers/vga",
     "drivers/serialuart16550",

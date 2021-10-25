@@ -8,25 +8,26 @@ name="kernel"
 test=false
 
 [features]
-qemu = []
-gdb = []
 
 [dependencies]
 bootloader = {version="0.9", features=["map_physical_memory"]}
-bitflags = {version="1", default-features=false}
-
 
 libx64 = {path = "../libx64"}
 kcore = {path = "../kcore"}
-interrupt_list = {path = "../interrupt_list", features=["libx64"]}
-page_mapper = {path = "../page_mapper"}
 
-log = {version="0.4", default-features=false, features=["max_level_trace"]}
-qemu_logger = {path = "../qemu_logger"}
-
+# ----- DRIVERS -----
+page_mapper = {path = "../drivers/page_mapper"}
 pic = {path = "../drivers/pic"}
 vga = {path = "../drivers/vga"}
 serialuart16550 = {path = "../drivers/serialuart16550"}
+
+# ----- UTILS -----
+bitflags = {version="1", default-features=false}
+log = {version="0.4", default-features=false, features=["max_level_trace"]}
+
+interrupt_list = {path = "../utils/interrupt_list", features=["libx64"]}
+qemu_logger = {path = "../utils/qemu_logger"}
+
 
 [package.metadata.bootimage]
 run-args = ["-serial", "stdio"]
