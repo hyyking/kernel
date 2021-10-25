@@ -2,7 +2,7 @@ use core::ptr::NonNull;
 
 use crate::paging::table::{PageLevel, PageTableIndex};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 #[repr(transparent)]
 pub struct VirtualAddr(u64);
 
@@ -43,7 +43,7 @@ impl VirtualAddr {
 
     #[inline]
     pub fn page_table_index<T: PageLevel>(self, _level: T) -> PageTableIndex<T> {
-        PageTableIndex::new_truncate((self.0 >> 12 >> (T::VALUE - 1) * 9) as u16)
+        PageTableIndex::new_truncate((self.0 >> 12 >> ((T::VALUE - 1) * 9)) as u16)
     }
 
     #[inline]
@@ -65,7 +65,7 @@ impl core::fmt::Debug for VirtualAddr {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 #[repr(transparent)]
 pub struct PhysicalAddr(u64);
 

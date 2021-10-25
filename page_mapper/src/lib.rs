@@ -18,23 +18,23 @@ use libx64::{
     },
 };
 
-use crate::walker::WalkResultExt;
+use crate::{
+    offset::OffsetWalker,
+    walker::{PageWalker, WalkResultExt},
+};
 
 pub struct OffsetMapper {
-    walker: walker::PageWalker<offset::OffsetWalker<Page4Kb>, Page4Kb>,
+    walker: PageWalker<OffsetWalker<Page4Kb>, Page4Kb>,
 }
 
 impl OffsetMapper {
     pub fn new(offset: VirtualAddr) -> Self {
         Self {
-            walker: walker::PageWalker::new(offset::OffsetWalker::new(offset)),
+            walker: PageWalker::new(OffsetWalker::new(offset)),
         }
     }
 
-    pub unsafe fn try_translate_addr(
-        &mut self,
-        addr: VirtualAddr,
-    ) -> Result<PhysicalAddr, FrameError> {
+    pub fn try_translate_addr(&mut self, addr: VirtualAddr) -> Result<PhysicalAddr, FrameError> {
         self.walker.try_translate_addr(addr)
     }
 
@@ -48,35 +48,40 @@ impl OffsetMapper {
         let addr = page.ptr();
         trace!("Mapping page: {:?} -> {:?}", &page, &frame);
 
-        unsafe {
-            let level_4 = self.walker.level4().as_mut();
-            let translator = self.walker.translator();
+        // SAFETY: Level 4 page table must exist and be valid since we are in long mode
+        let level_4 = unsafe { self.walker.level4().as_mut() };
+        let translator = self.walker.translator();
 
-            let entry = &mut level_4[addr.page_table_index(Level4)];
-            let level_3 = self
-                .walker
-                .walk_level3(&entry)
+        let entry = &mut level_4[addr.page_table_index(Level4)];
+        // SAFETY: Level 3 page table will be created if it is missing
+        let level_3 = unsafe {
+            self.walker
+                .walk_level3(entry)
                 .or_create(entry, flags, translator, allocator)?
-                .as_mut();
+                .as_mut()
+        };
 
-            let entry = &mut level_3[addr.page_table_index(Level3)];
-            let level_2 = self
-                .walker
-                .walk_level2(&entry)
+        let entry = &mut level_3[addr.page_table_index(Level3)];
+        // SAFETY: Level 2 page table will be created if it is missing
+        let level_2 = unsafe {
+            self.walker
+                .walk_level2(entry)
                 .or_create(entry, flags, translator, allocator)?
-                .as_mut();
+                .as_mut()
+        };
 
-            let entry = &mut level_2[addr.page_table_index(Level2)];
-            let level_1 = self
-                .walker
-                .walk_level1(&entry)
+        let entry = &mut level_2[addr.page_table_index(Level2)];
+        // SAFETY: Level 1 page table will be created if it is missing
+        let level_1 = unsafe {
+            self.walker
+                .walk_level1(entry)
                 .or_create(entry, flags, translator, allocator)?
-                .as_mut();
+                .as_mut()
+        };
 
-            let entry = &mut level_1[addr.page_table_index(Level1)];
-            entry.set_flags(flags);
-            entry.set_frame(frame);
-        }
+        let entry = &mut level_1[addr.page_table_index(Level1)];
+        entry.set_flags(flags);
+        entry.set_frame(frame);
 
         Ok(())
     }

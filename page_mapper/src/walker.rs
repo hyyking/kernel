@@ -38,34 +38,37 @@ where
         Self { translator }
     }
 
-    pub unsafe fn try_translate_addr(
-        &mut self,
-        addr: VirtualAddr,
-    ) -> Result<PhysicalAddr, FrameError> {
+    pub fn try_translate_addr(&mut self, addr: VirtualAddr) -> Result<PhysicalAddr, FrameError> {
         let page = self.level4();
 
-        let entry = &page.as_ref()[addr.page_table_index(Level4)];
+        // SAFETY: Level 4 page table must exist since we are in long mode
+        let entry = unsafe { &page.as_ref()[addr.page_table_index(Level4)] };
         let page = self.walk_level3(entry)?;
 
-        let entry = &page.as_ref()[addr.page_table_index(Level3)];
+        // SAFETY: Level 3 page table must exist since we check for existence in walk_level3
+        let entry = unsafe { &page.as_ref()[addr.page_table_index(Level3)] };
         let page = match self.walk_level2(entry)? {
             Level3Walk::PageTable(table) => table,
-            Level3Walk::HugePage(frame) => {
+
+            // SAFETY: we hold a valid huge page frame
+            Level3Walk::HugePage(frame) => unsafe {
                 return Ok(PageTable::<Level3>::translate_with_frame(frame, addr));
-            }
+            },
         };
 
-        let entry = &page.as_ref()[addr.page_table_index(Level2)];
+        // SAFETY: Level 3 page table must exist since we check for existence in walk_level2
+        let entry = unsafe { &page.as_ref()[addr.page_table_index(Level2)] };
         let mut page = match self.walk_level1(entry)? {
             Level2Walk::PageTable(table) => table,
-            Level2Walk::HugePage(frame) => {
+            // SAFETY: we hold a valid huge page frame
+            Level2Walk::HugePage(frame) => unsafe {
                 return Ok(PageTable::<Level2>::translate_with_frame(frame, addr));
-            }
+            },
         };
 
         let index = addr.page_table_index(Level1);
-        let addr = page.as_mut().translate_with_index(index, addr);
-        return addr;
+        // SAFETY: Level 1 page table must exist since we check for existence in walk_level1
+        unsafe { page.as_mut().translate_with_index(index, addr) }
     }
 
     pub(crate) fn walk_level3(

@@ -43,7 +43,7 @@ impl log::Log for Logger {
     fn log(&self, record: &log::Record) {
         _qprint(format_args!(
             "[{}][{}:{}] > {}\n",
-            colored_level(record.level()),
+            level(record.level()),
             record.module_path_static().unwrap_or(""),
             record.line().unwrap_or(0),
             record.args(),
@@ -53,7 +53,7 @@ impl log::Log for Logger {
     fn flush(&self) {}
 }
 
-fn colored_level<'a>(level: log::Level) -> &'static str {
+const fn level(level: log::Level) -> &'static str {
     match level {
         log::Level::Error => "ERROR",
         log::Level::Warn => "WARN ",

@@ -24,7 +24,8 @@ where
         debug_assert!(!offset.is_null());
         Self { offset }
     }
-    pub unsafe fn translate(&self, frame: PhysicalFrame<N>) -> NonNull<()> {
+
+    pub fn translate(&self, frame: PhysicalFrame<N>) -> NonNull<()> {
         (self.offset + frame.ptr().as_u64())
             .ptr()
             .expect("null frame pointer and offset")

@@ -3,7 +3,7 @@ use crate::{
     paging::{PageCheck, PageSize},
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct Page<const N: u64>
 where
     PageCheck<N>: PageSize,

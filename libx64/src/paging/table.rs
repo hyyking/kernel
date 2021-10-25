@@ -6,45 +6,15 @@ use crate::{
     paging::{
         entry::{MappedLevel2Page, MappedLevel3Page, PageEntry},
         frame::{FrameError, FrameTranslator, PhysicalFrame},
-        Page4Kb,
+        Page1Gb, Page2Mb, Page4Kb,
     },
 };
-
-use super::{Page1Gb, Page2Mb};
 
 #[derive(Debug)]
 #[repr(C, align(4096))]
 pub struct PageTable<LEVEL: PageLevel> {
     entries: [PageEntry<LEVEL>; 512],
     _m: core::marker::PhantomData<LEVEL>,
-}
-
-pub enum Level3Walk {
-    PageTable(NonNull<PageTable<Level2>>),
-    HugePage(PhysicalFrame<Page1Gb>),
-}
-
-pub enum Level2Walk {
-    PageTable(NonNull<PageTable<Level1>>),
-    HugePage(PhysicalFrame<Page2Mb>),
-}
-
-impl Level2Walk {
-    pub fn try_into_table(self) -> Result<NonNull<PageTable<Level1>>, FrameError> {
-        match self {
-            Level2Walk::PageTable(table) => Ok(table),
-            Level2Walk::HugePage(_) => Err(FrameError::UnexpectedHugePage),
-        }
-    }
-}
-
-impl Level3Walk {
-    pub fn try_into_table(self) -> Result<NonNull<PageTable<Level2>>, FrameError> {
-        match self {
-            Level3Walk::PageTable(table) => Ok(table),
-            Level3Walk::HugePage(_) => Err(FrameError::UnexpectedHugePage),
-        }
-    }
 }
 
 impl PageTable<Level4> {
@@ -60,6 +30,10 @@ impl PageTable<Level4> {
     }
 }
 
+pub enum Level3Walk {
+    PageTable(NonNull<PageTable<Level2>>),
+    HugePage(PhysicalFrame<Page1Gb>),
+}
 impl PageTable<Level3> {
     pub fn walk_next(
         cr: &PageEntry<Level3>,
@@ -73,7 +47,7 @@ impl PageTable<Level3> {
         }
     }
 
-    /// # Safety:
+    /// # Safety
     ///
     /// The virtual address must have a valid 1Gb page offset
     pub unsafe fn translate_with_frame(
@@ -84,6 +58,10 @@ impl PageTable<Level3> {
     }
 }
 
+pub enum Level2Walk {
+    PageTable(NonNull<PageTable<Level1>>),
+    HugePage(PhysicalFrame<Page2Mb>),
+}
 impl PageTable<Level2> {
     pub fn walk_next(
         cr: &PageEntry<Level2>,
@@ -97,7 +75,7 @@ impl PageTable<Level2> {
         }
     }
 
-    /// # Safety:
+    /// # Safety
     ///
     /// The virtual address must have a valid 2Mb page offset
     pub unsafe fn translate_with_frame(
@@ -162,6 +140,24 @@ impl<LEVEL: PageLevel> core::ops::Index<PageTableIndex<LEVEL>> for PageTable<LEV
 impl<LEVEL: PageLevel> core::ops::IndexMut<PageTableIndex<LEVEL>> for PageTable<LEVEL> {
     fn index_mut(&mut self, idx: PageTableIndex<LEVEL>) -> &mut Self::Output {
         &mut self.entries[idx.idx]
+    }
+}
+
+impl Level2Walk {
+    pub const fn try_into_table(self) -> Result<NonNull<PageTable<Level1>>, FrameError> {
+        match self {
+            Level2Walk::PageTable(table) => Ok(table),
+            Level2Walk::HugePage(_) => Err(FrameError::UnexpectedHugePage),
+        }
+    }
+}
+
+impl Level3Walk {
+    pub const fn try_into_table(self) -> Result<NonNull<PageTable<Level2>>, FrameError> {
+        match self {
+            Level3Walk::PageTable(table) => Ok(table),
+            Level3Walk::HugePage(_) => Err(FrameError::UnexpectedHugePage),
+        }
     }
 }
 

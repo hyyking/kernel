@@ -15,22 +15,26 @@ where
     fn alloc(&mut self) -> Result<PhysicalFrame<N>, FrameError>;
 }
 
-pub trait FrameTranslator<LEVEL, const N: u64>
+pub trait FrameTranslator<L, const N: u64>
 where
     PageCheck<N>: PageSize,
-    LEVEL: PageLevel,
+    L: PageLevel,
 {
-    unsafe fn translate_frame(&self, frame: PhysicalFrame<N>) -> NonNull<PageTable<LEVEL::Next>>;
+    /// # Safety
+    ///
+    /// The caller must uphold that the frame is a valid [`PageEntry`](super::entry::PageEntry)
+    /// frame
+    unsafe fn translate_frame(&self, frame: PhysicalFrame<N>) -> NonNull<PageTable<L::Next>>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum FrameError {
     UnexpectedHugePage,
     EntryMissing,
     Alloc,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct PhysicalFrame<const N: u64>
 where
     PageCheck<N>: PageSize,
