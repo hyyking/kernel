@@ -164,11 +164,20 @@ impl RawPageEntry {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 #[repr(transparent)]
 pub struct PageEntry<L> {
     raw: RawPageEntry,
     _level: core::marker::PhantomData<L>,
+}
+
+impl<L> core::fmt::Debug for PageEntry<L> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("PageEntry")
+            .field("flags", &Flags::from_bits_truncate(self.raw.as_u64()))
+            .field("address", &self.address())
+            .finish()
+    }
 }
 
 impl<L> PageEntry<L> {
@@ -180,6 +189,11 @@ impl<L> PageEntry<L> {
     #[inline]
     pub const fn raw(&self) -> &RawPageEntry {
         &self.raw
+    }
+
+    #[inline]
+    pub fn clear(&mut self) {
+        self.raw = RawPageEntry::zero();
     }
 
     #[inline]

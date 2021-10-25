@@ -55,8 +55,9 @@ pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
 
         let mut alloc = pagealloc::BootInfoFrameAllocator::init(&bi.memory_map);
 
-        let page: Page<Page4Kb> = Page::containing(VirtualAddr::new(0));
+        let page: Page<Page4Kb> = Page::containing(VirtualAddr::new(0xdeadbeaf000));
         let frame: PhysicalFrame<Page4Kb> = PhysicalFrame::containing(PhysicalAddr::new(0xb8000));
+
         walker
             .map_4kb_page(
                 page,
@@ -65,7 +66,6 @@ pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
                 &mut alloc,
             )
             .unwrap();
-
         libx64::paging::invalidate_tlb();
 
         dbg!(walker.try_translate_addr(page.ptr()).unwrap());

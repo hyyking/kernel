@@ -120,7 +120,11 @@ impl PageTable<Level1> {
     }
 }
 
-impl<LEVEL: PageLevel> PageTable<LEVEL> {}
+impl<LEVEL: PageLevel> PageTable<LEVEL> {
+    pub fn zero(&mut self) {
+        self.entries.iter_mut().for_each(PageEntry::clear);
+    }
+}
 
 #[derive(Clone, Copy)]
 #[repr(transparent)]
