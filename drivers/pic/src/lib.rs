@@ -5,7 +5,8 @@ use libx64::port::RWPort;
 
 pub mod chained;
 pub mod words;
-use words::*;
+
+use words::{ICW1, ICW3, ICW4};
 
 #[marker]
 pub trait PicState {}

@@ -7,14 +7,18 @@
 #![no_std]
 
 #[macro_use]
-extern crate kcore;
+extern crate vga;
+
+#[macro_use]
+extern crate log;
+
+#[macro_use]
+extern crate qemu_logger;
 
 use core::panic::PanicInfo;
 
 use libx64::address::VirtualAddr;
 
-#[macro_use]
-pub mod drivers;
 #[macro_use]
 mod infra;
 mod init;
@@ -23,6 +27,8 @@ mod memory;
 bootloader::entry_point!(kmain);
 
 pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
+    qemu_logger::init().expect("unable to initialize logger");
+
     kprintln!("[OK] kernel loaded");
 
     let pmo = VirtualAddr::new(bi.physical_memory_offset);
@@ -48,5 +54,6 @@ pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
 #[panic_handler]
 fn ph(info: &PanicInfo) -> ! {
     kprintln!("[PANIC]: {}", info);
+    error!("PANIC => {}", info);
     libx64::diverging_hlt();
 }

@@ -1,6 +1,8 @@
+#![no_std]
+
 use core::fmt::{self, Write};
 
-use kcore::{ptr::volatile::Volatile, sync::mutex::SpinMutex};
+use kcore::{klazy, ptr::volatile::Volatile, sync::mutex::SpinMutex};
 
 klazy! {
     pub ref static DRIVER: SpinMutex<VgaDriver<80, 25>> = SpinMutex::new(VgaDriver::new());
@@ -8,7 +10,7 @@ klazy! {
 
 #[macro_export]
 macro_rules! kprint {
-    ($($arg:tt)*) => ($crate::drivers::vga::_kprint(format_args!($($arg)*)));
+    ($($arg:tt)*) => ($crate::_kprint(format_args!($($arg)*)));
 }
 
 #[macro_export]

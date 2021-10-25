@@ -1,2 +1,14 @@
 [workspace]
-members = ["kernel", "libx64", "kcore", "bitfield", "pic", "interrupt_list"]
+members = [
+    "kernel",
+    "libx64",
+    "kcore",
+
+    "bitfield",
+    "interrupt_list",
+    "qemu_logger",
+    
+    "drivers/pic",
+    "drivers/vga",
+    "drivers/serialuart16550",
+]

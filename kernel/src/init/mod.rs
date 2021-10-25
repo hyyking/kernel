@@ -12,21 +12,21 @@ pub fn kinit() {
     let (gdt, segments) = &*gdt::GDT;
 
     lgdt(&gdt.lgdt_ptr());
-    qprintln!("[OK] GDT Initialized");
+    trace!("GDT Initialized");
 
     set_cs(segments.code_segment);
     ltr(segments.task_state);
-    qprintln!("[OK] Segments switched");
+    trace!("Segments switched");
 
     lidt(&interrupts::IDT.lidt_ptr());
-    qprintln!("[OK] IDT Initialized");
+    trace!("IDT Initialized");
 
     interrupts::user::PICS
         .lock()
         .init()
         .expect("failed to initialize PIC");
 
-    qprintln!("[OK] PIC Initialized");
+    trace!("PIC Initialized");
 
-    qprintln!("[OK] initialization successful");
+    info!("initialization successful");
 }

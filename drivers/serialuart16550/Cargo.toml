@@ -1,0 +1,11 @@
+[package]
+name = "serialuart16550"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bitflags = {version="1", default-features=false}
+bitfield = {path="../../bitfield"}
+libx64 = {path="../../libx64"}

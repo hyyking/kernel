@@ -1,3 +1,5 @@
+#![no_std]
+
 use bitflags::bitflags;
 
 use libx64::port::{Port, RPort, RWPort, WPort};
