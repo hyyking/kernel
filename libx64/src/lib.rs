@@ -1,4 +1,4 @@
-#![feature(asm)]
+#![feature(asm, never_type)]
 #![feature(abi_x86_interrupt)]
 #![no_std]
 

@@ -1,12 +1,13 @@
 use core::ptr::NonNull;
 
-use crate::paging::{PageTableIndex, PageTableLevel};
+use crate::paging::table::{PageLevel, PageTableIndex};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 #[repr(transparent)]
 pub struct VirtualAddr(u64);
 
 impl VirtualAddr {
+    #[inline]
     pub const fn new(addr: u64) -> Self {
         match addr >> 47 {
             0 | 0x1FFFF => Self(addr),
@@ -15,28 +16,44 @@ impl VirtualAddr {
         }
     }
 
+    #[inline]
     pub fn ptr<T>(&self) -> Option<NonNull<T>> {
         NonNull::new(self.0 as *mut T)
     }
 
+    #[inline]
     pub fn from_ptr<T>(ptr: *const T) -> Self {
         Self::new(ptr as u64)
     }
 
+    #[inline]
     pub const fn as_u64(self) -> u64 {
         self.0
     }
 
+    #[inline]
     pub const fn null() -> Self {
         Self(0)
     }
 
-    pub const fn page_table_index(self, level: PageTableLevel) -> PageTableIndex {
-        PageTableIndex::new_truncate((self.0 >> 12 >> (level as u64 - 1) * 9) as u16)
+    #[inline]
+    pub const fn is_null(self) -> bool {
+        self.0 == 0
     }
 
+    #[inline]
+    pub fn page_table_index<T: PageLevel>(self, _level: T) -> PageTableIndex<T> {
+        PageTableIndex::new_truncate((self.0 >> 12 >> ((T::VALUE - 1) * 9)) as u16)
+    }
+
+    #[inline]
     pub const fn page_offset(self) -> u16 {
         (self.0 as u16) % (1 << 12)
+    }
+
+    #[inline]
+    pub const fn align_down(self, align: u64) -> Self {
+        Self(align_down(self.0, align))
     }
 }
 
@@ -48,31 +65,37 @@ impl core::fmt::Debug for VirtualAddr {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 #[repr(transparent)]
 pub struct PhysicalAddr(u64);
 
 impl PhysicalAddr {
+    #[inline]
     pub const fn new(addr: u64) -> Self {
         Self(addr % (1 << 52))
     }
 
+    #[inline]
     pub fn ptr<T>(&self) -> Option<NonNull<T>> {
         NonNull::new(self.0 as *mut T)
     }
 
+    #[inline]
     pub fn from_ptr<T>(ptr: *const T) -> Self {
         Self::new(ptr as u64)
     }
 
+    #[inline]
     pub const fn as_u64(&self) -> u64 {
         self.0
     }
 
+    #[inline]
     pub const fn null() -> Self {
         Self(0)
     }
 
+    #[inline]
     pub const fn align_down(self, align: u64) -> Self {
         Self(align_down(self.0, align))
     }
@@ -100,4 +123,36 @@ pub const fn align_up(addr: u64, align: u64) -> u64 {
         return (addr | align_mask) + 1;
     }
     addr
+}
+
+impl core::ops::Add<u64> for VirtualAddr {
+    type Output = VirtualAddr;
+
+    fn add(self, rhs: u64) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+
+impl core::ops::Sub<u64> for VirtualAddr {
+    type Output = VirtualAddr;
+
+    fn sub(self, rhs: u64) -> Self::Output {
+        Self(self.0 - rhs)
+    }
+}
+
+impl core::ops::Add<u64> for PhysicalAddr {
+    type Output = PhysicalAddr;
+
+    fn add(self, rhs: u64) -> Self::Output {
+        Self(self.0 + rhs)
+    }
+}
+
+impl core::ops::Sub<u64> for PhysicalAddr {
+    type Output = PhysicalAddr;
+
+    fn sub(self, rhs: u64) -> Self::Output {
+        Self(self.0 - rhs)
+    }
 }
