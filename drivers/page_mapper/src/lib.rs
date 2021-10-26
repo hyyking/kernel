@@ -1,5 +1,4 @@
 #![no_std]
-#![feature(never_type)]
 
 #[macro_use]
 extern crate log;
@@ -14,7 +13,7 @@ use libx64::{
         frame::{FrameAllocator, FrameError, PhysicalFrame},
         page::{Page, PageMapper},
         table::{Level1, Level2, Level3, Level4},
-        Page4Kb,
+        Page1Gb, Page2Mb, Page4Kb,
     },
 };
 
@@ -37,8 +36,13 @@ impl OffsetMapper {
     pub fn try_translate_addr(&mut self, addr: VirtualAddr) -> Result<PhysicalAddr, FrameError> {
         self.walker.try_translate_addr(addr)
     }
+}
 
-    pub fn map_4kb_page<A: FrameAllocator<Page4Kb>>(
+impl<A> PageMapper<A, Page4Kb> for OffsetMapper
+where
+    A: FrameAllocator<Page4Kb>,
+{
+    fn map(
         &mut self,
         page: Page<Page4Kb>,
         frame: PhysicalFrame<Page4Kb>,
@@ -82,17 +86,79 @@ impl OffsetMapper {
     }
 }
 
-impl<A> PageMapper<A, Page4Kb> for OffsetMapper
+impl<A> PageMapper<A, Page2Mb> for OffsetMapper
 where
-    A: FrameAllocator<Page4Kb>,
+    A: FrameAllocator<Page4Kb> + FrameAllocator<Page2Mb>,
 {
     fn map(
         &mut self,
-        page: Page<Page4Kb>,
-        frame: PhysicalFrame<Page4Kb>,
+        page: Page<Page2Mb>,
+        frame: PhysicalFrame<Page2Mb>,
         flags: Flags,
         allocator: &mut A,
     ) -> Result<(), FrameError> {
-        self.map_4kb_page(page, frame, flags, allocator)
+        let addr = page.ptr();
+        trace!("Mapping page: {:?} -> {:?}", &page, &frame);
+
+        let level_4 = self.walker.level4();
+        let translator = self.walker.translator();
+
+        let entry = level_4.index_pin_mut(addr.page_table_index(Level4));
+        let level_3 = self
+            .walker
+            .walk_level3(entry)
+            .or_create(flags, translator, allocator)?;
+
+        let entry = level_3.index_pin_mut(addr.page_table_index(Level3));
+        let level_2 = self
+            .walker
+            .walk_level2(entry)
+            .or_create(flags, translator, allocator)?;
+
+        // SAFETY: we are the sole owner of this page and the entry will be valid
+        unsafe {
+            let entry = level_2
+                .index_pin_mut(addr.page_table_index(Level2))
+                .get_unchecked_mut();
+            entry.set_flags(flags | Flags::HUGE);
+            entry.set_frame(frame);
+        }
+
+        Ok(())
+    }
+}
+
+impl<A> PageMapper<A, Page1Gb> for OffsetMapper
+where
+    A: FrameAllocator<Page4Kb> + FrameAllocator<Page1Gb>,
+{
+    fn map(
+        &mut self,
+        page: Page<Page1Gb>,
+        frame: PhysicalFrame<Page1Gb>,
+        flags: Flags,
+        allocator: &mut A,
+    ) -> Result<(), FrameError> {
+        let addr = page.ptr();
+        trace!("Mapping page: {:?} -> {:?}", &page, &frame);
+
+        let level_4 = self.walker.level4();
+        let translator = self.walker.translator();
+
+        let entry = level_4.index_pin_mut(addr.page_table_index(Level4));
+        let level_3 = self
+            .walker
+            .walk_level3(entry)
+            .or_create(flags, translator, allocator)?;
+
+        // SAFETY: we are the sole owner of this page and the entry will be valid
+        unsafe {
+            let entry = level_3
+                .index_pin_mut(addr.page_table_index(Level3))
+                .get_unchecked_mut();
+            entry.set_flags(flags | Flags::HUGE);
+            entry.set_frame(frame);
+        }
+        Ok(())
     }
 }
