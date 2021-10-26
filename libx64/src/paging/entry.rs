@@ -140,6 +140,7 @@ impl RawPageEntry {
 pub struct PageEntry<L> {
     raw: RawPageEntry,
     _level: core::marker::PhantomData<L>,
+    _pin: core::marker::PhantomPinned,
 }
 
 impl<L> core::fmt::Debug for PageEntry<L> {
