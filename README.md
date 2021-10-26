@@ -18,7 +18,7 @@ Build a micro/exokernel
 - [X] IDT/GDT
 - [X] Paging
 - [X] Logging
-- [] Allocator
-- [] Scheduler
-- [] Filesystem
-- [] Network
+- [ ] Allocator
+- [ ] Scheduler
+- [ ] Filesystem
+- [ ] Network
