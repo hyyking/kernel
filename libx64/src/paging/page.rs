@@ -1,7 +1,26 @@
 use crate::{
     address::VirtualAddr,
-    paging::{PageCheck, PageSize},
+    paging::{entry::Flags, frame::FrameError, PageCheck, PageSize},
 };
+
+use super::{
+    frame::{FrameAllocator, PhysicalFrame},
+    Page4Kb,
+};
+
+pub trait PageMapper<A, const N: u64>
+where
+    A: FrameAllocator<Page4Kb> + FrameAllocator<N>,
+    PageCheck<N>: PageSize,
+{
+    fn map(
+        &mut self,
+        page: Page<N>,
+        frame: PhysicalFrame<N>,
+        flags: Flags,
+        allocator: &mut A,
+    ) -> Result<(), FrameError>;
+}
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct Page<const N: u64>
