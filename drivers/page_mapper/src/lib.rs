@@ -12,7 +12,7 @@ use libx64::{
     paging::{
         entry::Flags,
         frame::{FrameAllocator, FrameError, PhysicalFrame},
-        page::Page,
+        page::{Page, PageMapper},
         table::{Level1, Level2, Level3, Level4},
         Page4Kb,
     },
@@ -84,5 +84,20 @@ impl OffsetMapper {
         entry.set_frame(frame);
 
         Ok(())
+    }
+}
+
+impl<A> PageMapper<A, Page4Kb> for OffsetMapper
+where
+    A: FrameAllocator<Page4Kb>,
+{
+    fn map(
+        &mut self,
+        page: Page<Page4Kb>,
+        frame: PhysicalFrame<Page4Kb>,
+        flags: Flags,
+        allocator: &mut A,
+    ) -> Result<(), FrameError> {
+        self.map_4kb_page(page, frame, flags, allocator)
     }
 }

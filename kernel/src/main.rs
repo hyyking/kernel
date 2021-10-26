@@ -38,8 +38,7 @@ pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
     init::kinit();
     libx64::sti();
 
-    unsafe {
-        use libx64::paging::{entry::Flags, frame::PhysicalFrame, page::Page, Page4Kb};
+    {
         use page_mapper::OffsetMapper;
 
         let mut walker = OffsetMapper::new(pmo);
@@ -52,35 +51,20 @@ pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
             .try_translate_addr(VirtualAddr::new(0xb8000))
             .unwrap());
 
-        use libx64::paging::frame::FrameAllocator;
         let mut alloc = pagealloc::BootInfoFrameAllocator::init(&bi.memory_map);
 
-        let page: Page<Page4Kb> = Page::containing(crate::kalloc::HEAP_OFFSET);
-        let frame: PhysicalFrame<Page4Kb> = alloc.alloc().unwrap();
+        crate::kalloc::GLOBAL_ALLOC
+            .map(&mut walker, &mut alloc)
+            .expect("unable to map");
 
-        walker
-            .map_4kb_page(
-                page,
-                frame,
-                Flags::PRESENT | Flags::RW | Flags::US,
-                &mut alloc,
-            )
-            .unwrap();
-        libx64::paging::invalidate_tlb();
-
-        let test = vec![1u128, 2];
+        let _test = vec![1u128, 2];
         let test2 = alloc::boxed::Box::new(2u64);
         let test = alloc::boxed::Box::new(3u64);
+        debug!("{:#?}", &*crate::kalloc::GLOBAL_ALLOC.resource().lock());
         drop(test2);
-        let test = alloc::boxed::Box::new(2u64);
 
         debug!("{}", test);
         debug!("{:#?}", &*crate::kalloc::GLOBAL_ALLOC.resource().lock());
-        drop(test);
-
-        dbg!(walker.try_translate_addr(page.ptr()).unwrap());
-        let page_ptr = page.ptr().as_u64() as *mut u64;
-        page_ptr.offset(400).write_volatile(0x_f021_f077_f065_f04e);
     }
 
     #[cfg(test)]

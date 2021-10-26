@@ -1,7 +1,12 @@
 use alloc::alloc::{AllocError, Allocator, GlobalAlloc, Layout};
 use core::ptr::NonNull;
 
-use libx64::paging::{page::PageRange, PageCheck, PageSize};
+use libx64::paging::{
+    entry::Flags,
+    frame::{FrameAllocator, FrameError},
+    page::{PageMapper, PageRange},
+    Page4Kb, PageCheck, PageSize,
+};
 
 use crate::sync::mutex::SpinMutex;
 
@@ -28,6 +33,30 @@ where
     }
 }
 
+impl<T, const N: u64> MappedResource<T, N>
+where
+    PageCheck<N>: PageSize,
+{
+    pub fn map<M, A>(&self, mapper: &mut M, alloc: &mut A) -> Result<(), FrameError>
+    where
+        A: FrameAllocator<N> + FrameAllocator<Page4Kb>,
+        M: PageMapper<A, N>,
+    {
+        self.pages().try_for_each(|page| {
+            mapper.map(
+                page,
+                alloc.alloc()?,
+                Flags::PRESENT | Flags::RW | Flags::US,
+                alloc,
+            )
+        })?;
+
+        libx64::paging::invalidate_tlb();
+        Ok(())
+    }
+}
+
+// TODO: SOUNDNESS
 unsafe impl<T, const P: u64> Sync for MappedResource<SpinMutex<T>, P> where PageCheck<P>: PageSize {}
 unsafe impl<T, const P: u64> Send for MappedResource<SpinMutex<T>, P> where PageCheck<P>: PageSize {}
 
