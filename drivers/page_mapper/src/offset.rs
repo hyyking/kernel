@@ -1,4 +1,4 @@
-use core::ptr::NonNull;
+use core::{pin::Pin, ptr::NonNull};
 
 use libx64::{
     address::VirtualAddr,
@@ -37,11 +37,11 @@ where
     PageCheck<N>: PageSize,
 {
     #[inline]
-    unsafe fn translate_frame(
+    unsafe fn translate_frame<'a>(
         &self,
         frame: PhysicalFrame<N>,
-    ) -> NonNull<PageTable<<() as PageLevel>::Next>> {
-        self.translate(frame).cast()
+    ) -> Pin<&'a mut PageTable<<() as PageLevel>::Next>> {
+        Pin::new_unchecked(self.translate(frame).cast().as_mut())
     }
 }
 
@@ -50,11 +50,11 @@ where
     PageCheck<N>: PageSize,
 {
     #[inline]
-    unsafe fn translate_frame(
+    unsafe fn translate_frame<'a>(
         &self,
         frame: PhysicalFrame<N>,
-    ) -> NonNull<PageTable<<Level4 as PageLevel>::Next>> {
-        self.translate(frame).cast()
+    ) -> Pin<&'a mut PageTable<<Level4 as PageLevel>::Next>> {
+        Pin::new_unchecked(self.translate(frame).cast().as_mut())
     }
 }
 
@@ -63,11 +63,11 @@ where
     PageCheck<N>: NotHugePageSize,
 {
     #[inline]
-    unsafe fn translate_frame(
+    unsafe fn translate_frame<'a>(
         &self,
         frame: PhysicalFrame<N>,
-    ) -> NonNull<PageTable<<Level3 as PageLevel>::Next>> {
-        self.translate(frame).cast()
+    ) -> Pin<&'a mut PageTable<<Level3 as PageLevel>::Next>> {
+        Pin::new_unchecked(self.translate(frame).cast().as_mut())
     }
 }
 
@@ -76,10 +76,10 @@ where
     PageCheck<N>: NotGiantPageSize,
 {
     #[inline]
-    unsafe fn translate_frame(
+    unsafe fn translate_frame<'a>(
         &self,
         frame: PhysicalFrame<N>,
-    ) -> NonNull<PageTable<<Level2 as PageLevel>::Next>> {
-        self.translate(frame).cast()
+    ) -> Pin<&'a mut PageTable<<Level2 as PageLevel>::Next>> {
+        Pin::new_unchecked(self.translate(frame).cast().as_mut())
     }
 }
