@@ -11,6 +11,7 @@ pub mod paging;
 pub mod port;
 pub mod rflags;
 pub mod segments;
+pub mod units;
 
 #[repr(u8)]
 pub enum Privilege {

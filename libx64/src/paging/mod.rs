@@ -1,4 +1,7 @@
-use crate::address::VirtualAddr;
+use crate::{
+    address::VirtualAddr,
+    units::bits::{Gb, Kb, Mb},
+};
 
 pub mod entry;
 pub mod frame;
@@ -6,13 +9,13 @@ pub mod page;
 pub mod table;
 
 #[allow(non_upper_case_globals)]
-pub const Page4Kb: u64 = 4096;
+pub const Page4Kb: u64 = 4 * Kb;
 
 #[allow(non_upper_case_globals)]
-pub const Page2Mb: u64 = Page4Kb * 512;
+pub const Page2Mb: u64 = 2 * Mb;
 
 #[allow(non_upper_case_globals)]
-pub const Page1Gb: u64 = Page2Mb * 512;
+pub const Page1Gb: u64 = 1 * Gb;
 
 pub trait PageSize {}
 pub trait NotHugePageSize: PageSize {}

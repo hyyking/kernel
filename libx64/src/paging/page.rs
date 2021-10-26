@@ -11,6 +11,47 @@ where
     addr: VirtualAddr,
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct PageRange<const N: u64>
+where
+    PageCheck<N>: PageSize,
+{
+    start: VirtualAddr,
+    end: VirtualAddr,
+    at: u64,
+}
+
+impl<const N: u64> Iterator for PageRange<N>
+where
+    PageCheck<N>: PageSize,
+{
+    type Item = Page<N>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let addr = self.start.align_down(N) + (self.at * N);
+        if addr.as_u64() > (self.end.as_u64() - 1) {
+            return None;
+        }
+        self.at += 1;
+        Some(Page::containing(addr))
+    }
+}
+
+impl<const N: u64> PageRange<N>
+where
+    PageCheck<N>: PageSize,
+{
+    pub const fn new(start: VirtualAddr, end: VirtualAddr) -> Self {
+        Self { start, end, at: 0 }
+    }
+
+    pub const fn with_size(start: VirtualAddr, size: u64) -> Self {
+        debug_assert!(size % N == 0, "size must be a multiple of the page size");
+        let end = VirtualAddr::new(start.as_u64() + size);
+        Self { start, end, at: 0 }
+    }
+}
+
 impl<const N: u64> Page<N>
 where
     PageCheck<N>: PageSize,
