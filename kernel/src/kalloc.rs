@@ -10,7 +10,7 @@ use libx64::{
     units::bits::Kb,
 };
 
-type AllocatorResource = MappedResource<SpinMutex<SlabPage<256>>, Page4Kb>;
+type AllocatorResource = MappedResource<SpinMutex<SlabPage<128>>, Page4Kb>;
 
 pub const HEAP_OFFSET: VirtualAddr = VirtualAddr::new(0x4444_4444_0000);
 

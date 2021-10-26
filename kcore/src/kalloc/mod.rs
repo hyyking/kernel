@@ -38,28 +38,44 @@ where
         self.len as usize
     }
 
-    fn allocate(&mut self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-        assert!(layout.size() <= Self::SLOT_BYTES, "{:?}", layout);
+    pub const fn capacity(&self) -> usize {
+        (Page4Kb / N) as usize
+    }
 
-        for i in 0..32 {
-            let mask_entry = 1 << i;
-            if mask_entry & self.mask == 0 {
-                self.mask |= mask_entry;
-                unsafe {
-                    let s = core::slice::from_raw_parts_mut(
-                        self.base.as_ptr().offset(i * (Self::SLOT_BYTES as isize)),
-                        Self::SLOT_BYTES,
-                    );
-                    self.len += 1;
-                    return Ok(NonNull::from(s));
-                }
-            }
+    fn allocate(&mut self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        if layout.size() > Self::SLOT_BYTES {
+            return Err(AllocError);
         }
-        Err(AllocError)
+
+        let result = if self.len() % 2 == 0 {
+            let mut range = 0..(self.capacity() / 2);
+            range.find_map(|i| self.try_alloc_at(i))
+        } else {
+            let range = (self.capacity() / 2)..self.capacity();
+            range.rev().find_map(|i| self.try_alloc_at(i))
+        };
+        result.ok_or(AllocError)
+    }
+
+    fn try_alloc_at(&mut self, at: usize) -> Option<NonNull<[u8]>> {
+        let mask_entry = 1 << at;
+        if mask_entry & self.mask == 0 {
+            self.mask |= mask_entry;
+            self.len += 1;
+            let s = unsafe {
+                core::slice::from_raw_parts_mut(
+                    self.base.as_ptr().add(at * Self::SLOT_BYTES),
+                    Self::SLOT_BYTES,
+                )
+            };
+            Some(NonNull::from(s))
+        } else {
+            None
+        }
     }
 
     fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) {
-        assert!(layout.size() <= Self::SLOT_BYTES, "{:?}={:?}", ptr, layout);
+        debug_assert!(layout.size() <= Self::SLOT_BYTES, "{:?}={:?}", ptr, layout);
 
         let ptr = ptr.as_ptr() as u64;
         let this = self.base.as_ptr() as u64;
@@ -83,6 +99,7 @@ where
             .field("base", &format_args!("{:#x}", self.base.as_ptr() as u64))
             .field("mask", &format_args!("{:#034b}", self.mask))
             .field("len", &self.len)
+            .field("cap", &self.capacity())
             .finish()
     }
 }

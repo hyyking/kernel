@@ -57,7 +57,8 @@ pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
             .map(&mut walker, &mut alloc)
             .expect("unable to map");
 
-        let _test = vec![1u128, 2];
+        let test = vec![1u128];
+        dbg!(test);
         let test2 = alloc::boxed::Box::new(2u64);
         let test = alloc::boxed::Box::new(3u64);
         debug!("{:#?}", &*crate::kalloc::GLOBAL_ALLOC.resource().lock());
