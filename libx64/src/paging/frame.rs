@@ -1,4 +1,4 @@
-use core::ptr::NonNull;
+use core::pin::Pin;
 
 use crate::{
     address::PhysicalAddr,
@@ -24,7 +24,10 @@ where
     ///
     /// The caller must uphold that the frame is a valid [`PageEntry`](super::entry::PageEntry)
     /// frame
-    unsafe fn translate_frame(&self, frame: PhysicalFrame<N>) -> NonNull<PageTable<L::Next>>;
+    unsafe fn translate_frame<'a>(
+        &self,
+        frame: PhysicalFrame<N>,
+    ) -> Pin<&'a mut PageTable<L::Next>>;
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]

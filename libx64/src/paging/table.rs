@@ -1,4 +1,4 @@
-use core::ptr::NonNull;
+use core::pin::Pin;
 
 use crate::{
     address::{PhysicalAddr, VirtualAddr},
@@ -15,30 +15,43 @@ use crate::{
 pub struct PageTable<LEVEL: PageLevel> {
     entries: [PageEntry<LEVEL>; 512],
     _m: core::marker::PhantomData<LEVEL>,
+    _p: core::marker::PhantomPinned,
+}
+
+impl<LEVEL: PageLevel> PageTable<LEVEL> {
+    pub fn index_pin(self: Pin<&Self>, idx: PageTableIndex<LEVEL>) -> Pin<&PageEntry<LEVEL>> {
+        unsafe { self.map_unchecked(|page| &page[idx]) }
+    }
+    pub fn index_pin_mut(
+        self: Pin<&mut Self>,
+        idx: PageTableIndex<LEVEL>,
+    ) -> Pin<&mut PageEntry<LEVEL>> {
+        unsafe { self.map_unchecked_mut(|page| &mut page[idx]) }
+    }
 }
 
 impl PageTable<Level4> {
-    pub fn new(cr: CR3, translator: &dyn FrameTranslator<(), Page4Kb>) -> NonNull<Self> {
+    pub fn new<'a>(cr: CR3, translator: &dyn FrameTranslator<(), Page4Kb>) -> Pin<&'a mut Self> {
         unsafe { translator.translate_frame(cr.frame()) }
     }
 
-    pub fn walk_next(
-        cr: &PageEntry<Level4>,
+    pub fn walk_next<'a, 'b: 'a>(
+        cr: Pin<&'a PageEntry<Level4>>,
         translator: &dyn FrameTranslator<Level4, Page4Kb>,
-    ) -> Result<NonNull<PageTable<Level3>>, FrameError> {
+    ) -> Result<Pin<&'b mut PageTable<Level3>>, FrameError> {
         unsafe { Ok(translator.translate_frame(cr.frame()?)) }
     }
 }
 
-pub enum Level3Walk {
-    PageTable(NonNull<PageTable<Level2>>),
+pub enum Level3Walk<'a> {
+    PageTable(Pin<&'a mut PageTable<Level2>>),
     HugePage(PhysicalFrame<Page1Gb>),
 }
 impl PageTable<Level3> {
-    pub fn walk_next(
-        cr: &PageEntry<Level3>,
+    pub fn walk_next<'a, 'b: 'a>(
+        cr: Pin<&'a PageEntry<Level3>>,
         translator: &dyn FrameTranslator<Level3, Page4Kb>,
-    ) -> Result<Level3Walk, FrameError> {
+    ) -> Result<Level3Walk<'b>, FrameError> {
         match cr.frame()? {
             MappedLevel3Page::Page4Kb(frame) => unsafe {
                 Ok(Level3Walk::PageTable(translator.translate_frame(frame)))
@@ -58,15 +71,16 @@ impl PageTable<Level3> {
     }
 }
 
-pub enum Level2Walk {
-    PageTable(NonNull<PageTable<Level1>>),
+pub enum Level2Walk<'a> {
+    PageTable(Pin<&'a mut PageTable<Level1>>),
     HugePage(PhysicalFrame<Page2Mb>),
 }
+
 impl PageTable<Level2> {
-    pub fn walk_next(
-        cr: &PageEntry<Level2>,
+    pub fn walk_next<'a, 'b: 'a>(
+        cr: Pin<&'a PageEntry<Level2>>,
         translator: &dyn FrameTranslator<Level2, Page4Kb>,
-    ) -> Result<Level2Walk, FrameError> {
+    ) -> Result<Level2Walk<'b>, FrameError> {
         match cr.frame()? {
             MappedLevel2Page::Page4Kb(frame) => unsafe {
                 Ok(Level2Walk::PageTable(translator.translate_frame(frame)))
@@ -88,7 +102,7 @@ impl PageTable<Level2> {
 
 impl PageTable<Level1> {
     pub fn translate_with_index(
-        &self,
+        self: Pin<&Self>,
         idx: PageTableIndex<Level1>,
         virt: VirtualAddr,
     ) -> Result<PhysicalAddr, FrameError> {
@@ -143,8 +157,8 @@ impl<LEVEL: PageLevel> core::ops::IndexMut<PageTableIndex<LEVEL>> for PageTable<
     }
 }
 
-impl Level2Walk {
-    pub const fn try_into_table(self) -> Result<NonNull<PageTable<Level1>>, FrameError> {
+impl<'a> Level2Walk<'a> {
+    pub fn try_into_table(self) -> Result<Pin<&'a mut PageTable<Level1>>, FrameError> {
         match self {
             Level2Walk::PageTable(table) => Ok(table),
             Level2Walk::HugePage(_) => Err(FrameError::UnexpectedHugePage),
@@ -152,8 +166,8 @@ impl Level2Walk {
     }
 }
 
-impl Level3Walk {
-    pub const fn try_into_table(self) -> Result<NonNull<PageTable<Level2>>, FrameError> {
+impl<'a> Level3Walk<'a> {
+    pub fn try_into_table(self) -> Result<Pin<&'a mut PageTable<Level2>>, FrameError> {
         match self {
             Level3Walk::PageTable(table) => Ok(table),
             Level3Walk::HugePage(_) => Err(FrameError::UnexpectedHugePage),
