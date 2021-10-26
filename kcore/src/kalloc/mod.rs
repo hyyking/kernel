@@ -50,6 +50,7 @@ where
                         self.base.as_ptr().offset(i * (Self::SLOT_BYTES as isize)),
                         Self::SLOT_BYTES,
                     );
+                    self.len += 1;
                     return Ok(NonNull::from(s));
                 }
             }
@@ -65,7 +66,11 @@ where
 
         let offset = (ptr - this) as usize / Self::SLOT_BYTES;
         let mask = 1 << offset;
-        self.mask ^= mask;
+
+        if mask & self.mask != 0 {
+            self.len -= 1;
+            self.mask ^= mask;
+        }
     }
 }
 
@@ -77,6 +82,7 @@ where
         f.debug_struct("SlabPage")
             .field("base", &format_args!("{:#x}", self.base.as_ptr() as u64))
             .field("mask", &format_args!("{:#034b}", self.mask))
+            .field("len", &self.len)
             .finish()
     }
 }
