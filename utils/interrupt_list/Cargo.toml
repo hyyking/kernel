@@ -5,8 +5,6 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[features]
-libx64 = []
 
 [lib]
 proc-macro=true
@@ -15,3 +13,5 @@ proc-macro=true
 syn = {version="1", features=["full"]}
 quote = {version="1"}
 proc-macro2 = {version="1"}
+
+libx64 = {path = "../../libx64", optional=true}
