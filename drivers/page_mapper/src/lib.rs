@@ -65,11 +65,9 @@ where
 
         // SAFETY: we are the sole owner of this page and the entry will be valid
         unsafe {
-            let entry = level_1
-                .index_pin_mut(addr.page_table_index(Level1))
-                .get_unchecked_mut();
-            entry.set_flags(flags);
-            entry.set_frame(frame);
+            let mut entry = level_1.index_pin_mut(addr.page_table_index(Level1));
+            entry.as_mut().set_flags(flags);
+            entry.as_mut().set_frame(frame);
         }
 
         Ok(())
@@ -100,11 +98,9 @@ where
 
         // SAFETY: we are the sole owner of this page and the entry will be valid
         unsafe {
-            let entry = level_2
-                .index_pin_mut(addr.page_table_index(Level2))
-                .get_unchecked_mut();
-            entry.set_flags(flags | Flags::HUGE);
-            entry.set_frame(frame);
+            let mut entry = level_2.index_pin_mut(addr.page_table_index(Level2));
+            entry.as_mut().set_flags(flags | Flags::HUGE);
+            entry.as_mut().set_frame(frame);
         }
 
         Ok(())
@@ -132,11 +128,9 @@ where
 
         // SAFETY: we are the sole owner of this page and the entry will be valid
         unsafe {
-            let entry = level_3
-                .index_pin_mut(addr.page_table_index(Level3))
-                .get_unchecked_mut();
-            entry.set_flags(flags | Flags::HUGE);
-            entry.set_frame(frame);
+            let mut entry = level_3.index_pin_mut(addr.page_table_index(Level3));
+            entry.as_mut().set_flags(flags | Flags::HUGE);
+            entry.as_mut().set_frame(frame);
         }
         Ok(())
     }

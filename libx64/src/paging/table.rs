@@ -108,21 +108,21 @@ impl PageTable<Level1> {
         idx: PageTableIndex<Level1>,
         virt: VirtualAddr,
     ) -> Result<PhysicalAddr, FrameError> {
-        // SAFETY: We return a pointer, unsafe should not be at call site, but at deref site.
-        // since we have a level 1 table, an entry and an index the page table should exist. The
-        // entry is, in the worst case, empty which is handled by the frame method.
-        unsafe {
-            self[idx]
-                .assume_init_ref()
-                .frame()
-                .map(|f| f.ptr() + u64::from(virt.page_offset()))
-        }
+        self.index_pin(idx)
+            .frame()
+            .map(|f| f.ptr() + u64::from(virt.page_offset()))
     }
 }
 
 impl<LEVEL: PageLevel> PageTable<LEVEL> {
-    pub fn zero(&mut self) {
-        self.entries.iter_mut().for_each(PageEntry::clear);
+    /// # Safety:
+    ///
+    /// The page must not contain a valid used entry
+    pub unsafe fn zero(self: Pin<&mut Self>) {
+        self.get_unchecked_mut()
+            .entries
+            .iter_mut()
+            .for_each(PageEntry::clear);
     }
 }
 

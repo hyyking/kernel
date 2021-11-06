@@ -1,3 +1,5 @@
+use core::pin::Pin;
+
 use crate::{
     address::PhysicalAddr,
     paging::{
@@ -169,11 +171,6 @@ impl<L> PageEntry<L> {
     }
 
     #[inline]
-    pub fn set_flags(&mut self, flags: Flags) {
-        self.raw = self.raw.set_flags(flags);
-    }
-
-    #[inline]
     pub const fn get_flags(&self) -> Flags {
         self.raw.get_flags()
     }
@@ -194,27 +191,42 @@ impl<L> PageEntry<L> {
     }
 
     #[inline]
-    pub fn set_mpk(&mut self, val: u8) {
-        self.raw = self.raw.set_mpk(u64::from(val));
-    }
-
-    #[inline]
     pub const fn get_user_bits(&self) -> u64 {
         self.raw.get_user_bits()
     }
 
     #[inline]
-    pub fn set_user_bits(&mut self, val: u8) {
-        self.raw = self.raw.set_user_bits(u64::from(val));
+    pub fn set_flags(self: Pin<&mut Self>, flags: Flags) {
+        unsafe {
+            let this = self.get_unchecked_mut();
+            this.raw = this.raw.set_flags(flags);
+        }
+    }
+
+    #[inline]
+    pub fn set_user_bits(self: Pin<&mut Self>, val: u8) {
+        unsafe {
+            let this = self.get_unchecked_mut();
+            this.raw = this.raw.set_user_bits(u64::from(val));
+        }
+    }
+
+    #[inline]
+    pub fn set_mpk(self: Pin<&mut Self>, val: u8) {
+        unsafe {
+            let this = self.get_unchecked_mut();
+            this.raw = this.raw.set_mpk(u64::from(val));
+        }
     }
 }
 
 impl PageEntry<Level1> {
-    pub fn set_frame(&mut self, addr: PhysicalFrame<Page4Kb>) {
-        self.raw = self.raw.set_address(addr.ptr());
+    pub unsafe fn set_frame(self: Pin<&mut Self>, addr: PhysicalFrame<Page4Kb>) {
+        let this = self.get_unchecked_mut();
+        this.raw = this.raw.set_address(addr.ptr());
     }
 
-    pub const fn frame(&self) -> Result<PhysicalFrame<Page4Kb>, FrameError> {
+    pub fn frame(self: Pin<&Self>) -> Result<PhysicalFrame<Page4Kb>, FrameError> {
         if !self.is_present() {
             Err(FrameError::EntryMissing)
         } else if self.is_huge() {
@@ -230,14 +242,15 @@ pub enum MappedLevel2Page {
     Page2Mb(PhysicalFrame<Page2Mb>),
 }
 impl PageEntry<Level2> {
-    pub fn set_frame<const N: u64>(&mut self, addr: PhysicalFrame<N>)
+    pub unsafe fn set_frame<const N: u64>(self: Pin<&mut Self>, addr: PhysicalFrame<N>)
     where
         PageCheck<N>: NotGiantPageSize, // 4Kb or 2Mb
     {
-        self.raw = self.raw.set_address(addr.ptr());
+        let this = self.get_unchecked_mut();
+        this.raw = this.raw.set_address(addr.ptr());
     }
 
-    pub const fn frame(&self) -> Result<MappedLevel2Page, FrameError> {
+    pub fn frame(self: Pin<&Self>) -> Result<MappedLevel2Page, FrameError> {
         if !self.is_present() {
             Err(FrameError::EntryMissing)
         } else if self.is_huge() {
@@ -257,14 +270,15 @@ pub enum MappedLevel3Page {
     Page1Gb(PhysicalFrame<Page1Gb>),
 }
 impl PageEntry<Level3> {
-    pub fn set_frame<const N: u64>(&mut self, addr: PhysicalFrame<N>)
+    pub unsafe fn set_frame<const N: u64>(self: Pin<&mut Self>, addr: PhysicalFrame<N>)
     where
         PageCheck<N>: NotHugePageSize, // 4Kb or 1Gb
     {
-        self.raw = self.raw.set_address(addr.ptr());
+        let this = self.get_unchecked_mut();
+        this.raw = this.raw.set_address(addr.ptr());
     }
 
-    pub const fn frame(&self) -> Result<MappedLevel3Page, FrameError> {
+    pub fn frame(self: Pin<&Self>) -> Result<MappedLevel3Page, FrameError> {
         if !self.is_present() {
             Err(FrameError::EntryMissing)
         } else if self.is_huge() {
@@ -280,11 +294,12 @@ impl PageEntry<Level3> {
 }
 
 impl PageEntry<Level4> {
-    pub fn set_frame(&mut self, addr: PhysicalFrame<Page4Kb>) {
-        self.raw = self.raw.set_address(addr.ptr());
+    pub unsafe fn set_frame(self: Pin<&mut Self>, addr: PhysicalFrame<Page4Kb>) {
+        let this = self.get_unchecked_mut();
+        this.raw = this.raw.set_address(addr.ptr());
     }
 
-    pub const fn frame(&self) -> Result<PhysicalFrame<Page4Kb>, FrameError> {
+    pub fn frame(self: Pin<&Self>) -> Result<PhysicalFrame<Page4Kb>, FrameError> {
         if !self.is_present() {
             Err(FrameError::EntryMissing)
         } else if self.is_huge() {
