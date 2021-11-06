@@ -53,33 +53,21 @@ where
         trace!("Mapping page: {:?} -> {:?}", &page, &frame);
 
         let level_4 = self.walker.level4();
-        let translator = self.walker.translator();
 
         let entry = level_4.index_pin_mut(addr.page_table_index(Level4));
-        let level_3 = self
-            .walker
-            .walk_level3(entry)
-            .or_create(flags, translator, allocator)?;
+        let level_3 = self.walker.walk_level3(entry).or_create(flags, allocator)?;
 
         let entry = level_3.index_pin_mut(addr.page_table_index(Level3));
-        let level_2 = self
-            .walker
-            .walk_level2(entry)
-            .or_create(flags, translator, allocator)?;
+        let level_2 = self.walker.walk_level2(entry).or_create(flags, allocator)?;
 
         let entry = level_2.index_pin_mut(addr.page_table_index(Level2));
-        let level_1 = self
-            .walker
-            .walk_level1(entry)
-            .or_create(flags, translator, allocator)?;
+        let level_1 = self.walker.walk_level1(entry).or_create(flags, allocator)?;
 
         // SAFETY: we are the sole owner of this page and the entry will be valid
         unsafe {
-            let entry = level_1
-                .index_pin_mut(addr.page_table_index(Level1))
-                .get_unchecked_mut();
-            entry.set_flags(flags);
-            entry.set_frame(frame);
+            let mut entry = level_1.index_pin_mut(addr.page_table_index(Level1));
+            entry.as_mut().set_flags(flags);
+            entry.as_mut().set_frame(frame);
         }
 
         Ok(())
@@ -101,27 +89,18 @@ where
         trace!("Mapping page: {:?} -> {:?}", &page, &frame);
 
         let level_4 = self.walker.level4();
-        let translator = self.walker.translator();
 
         let entry = level_4.index_pin_mut(addr.page_table_index(Level4));
-        let level_3 = self
-            .walker
-            .walk_level3(entry)
-            .or_create(flags, translator, allocator)?;
+        let level_3 = self.walker.walk_level3(entry).or_create(flags, allocator)?;
 
         let entry = level_3.index_pin_mut(addr.page_table_index(Level3));
-        let level_2 = self
-            .walker
-            .walk_level2(entry)
-            .or_create(flags, translator, allocator)?;
+        let level_2 = self.walker.walk_level2(entry).or_create(flags, allocator)?;
 
         // SAFETY: we are the sole owner of this page and the entry will be valid
         unsafe {
-            let entry = level_2
-                .index_pin_mut(addr.page_table_index(Level2))
-                .get_unchecked_mut();
-            entry.set_flags(flags | Flags::HUGE);
-            entry.set_frame(frame);
+            let mut entry = level_2.index_pin_mut(addr.page_table_index(Level2));
+            entry.as_mut().set_flags(flags | Flags::HUGE);
+            entry.as_mut().set_frame(frame);
         }
 
         Ok(())
@@ -143,21 +122,15 @@ where
         trace!("Mapping page: {:?} -> {:?}", &page, &frame);
 
         let level_4 = self.walker.level4();
-        let translator = self.walker.translator();
 
         let entry = level_4.index_pin_mut(addr.page_table_index(Level4));
-        let level_3 = self
-            .walker
-            .walk_level3(entry)
-            .or_create(flags, translator, allocator)?;
+        let level_3 = self.walker.walk_level3(entry).or_create(flags, allocator)?;
 
         // SAFETY: we are the sole owner of this page and the entry will be valid
         unsafe {
-            let entry = level_3
-                .index_pin_mut(addr.page_table_index(Level3))
-                .get_unchecked_mut();
-            entry.set_flags(flags | Flags::HUGE);
-            entry.set_frame(frame);
+            let mut entry = level_3.index_pin_mut(addr.page_table_index(Level3));
+            entry.as_mut().set_flags(flags | Flags::HUGE);
+            entry.as_mut().set_frame(frame);
         }
         Ok(())
     }

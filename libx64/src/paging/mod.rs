@@ -1,3 +1,5 @@
+use core::pin::Pin;
+
 use crate::{
     address::VirtualAddr,
     units::bits::{Gb, Kb, Mb},
@@ -7,6 +9,9 @@ pub mod entry;
 pub mod frame;
 pub mod page;
 pub mod table;
+
+pub type PinTableMut<'a, L> = Pin<&'a mut table::PageTable<L>>;
+pub type PinEntryMut<'a, L> = Pin<&'a mut entry::PageEntry<L>>;
 
 #[allow(non_upper_case_globals)]
 pub const Page4Kb: u64 = 4 * Kb;

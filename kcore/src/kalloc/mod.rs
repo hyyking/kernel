@@ -38,6 +38,10 @@ where
         self.len as usize
     }
 
+    pub const fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub const fn capacity(&self) -> usize {
         (Page4Kb / N) as usize
     }

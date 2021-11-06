@@ -6,9 +6,11 @@ use crate::{
     paging::{
         entry::{MappedLevel2Page, MappedLevel3Page, PageEntry},
         frame::{FrameError, FrameTranslator, PhysicalFrame},
-        Page1Gb, Page2Mb, Page4Kb,
+        Page1Gb, Page2Mb, Page4Kb, PinEntryMut,
     },
 };
+
+use super::PinTableMut;
 
 #[derive(Debug)]
 #[repr(C, align(4096))]
@@ -20,13 +22,13 @@ pub struct PageTable<LEVEL: PageLevel> {
 
 impl<LEVEL: PageLevel> PageTable<LEVEL> {
     pub fn index_pin(self: Pin<&Self>, idx: PageTableIndex<LEVEL>) -> Pin<&PageEntry<LEVEL>> {
-        unsafe { self.map_unchecked(|page| &page[idx]) }
+        unsafe { self.map_unchecked(|page| page[idx].assume_init_ref()) }
     }
     pub fn index_pin_mut(
         self: Pin<&mut Self>,
         idx: PageTableIndex<LEVEL>,
-    ) -> Pin<&mut PageEntry<LEVEL>> {
-        unsafe { self.map_unchecked_mut(|page| &mut page[idx]) }
+    ) -> PinEntryMut<'_, LEVEL> {
+        unsafe { self.map_unchecked_mut(|page| page[idx].assume_init_mut()) }
     }
 }
 
@@ -37,14 +39,14 @@ impl PageTable<Level4> {
 
     pub fn walk_next<'a, 'b: 'a>(
         cr: Pin<&'a PageEntry<Level4>>,
-        translator: &dyn FrameTranslator<Level4, Page4Kb>,
+        translator: &'a dyn FrameTranslator<Level4, Page4Kb>,
     ) -> Result<Pin<&'b mut PageTable<Level3>>, FrameError> {
         unsafe { Ok(translator.translate_frame(cr.frame()?)) }
     }
 }
 
 pub enum Level3Walk<'a> {
-    PageTable(Pin<&'a mut PageTable<Level2>>),
+    PageTable(PinTableMut<'a, Level2>),
     HugePage(PhysicalFrame<Page1Gb>),
 }
 impl PageTable<Level3> {
@@ -72,7 +74,7 @@ impl PageTable<Level3> {
 }
 
 pub enum Level2Walk<'a> {
-    PageTable(Pin<&'a mut PageTable<Level1>>),
+    PageTable(PinTableMut<'a, Level1>),
     HugePage(PhysicalFrame<Page2Mb>),
 }
 
@@ -106,15 +108,21 @@ impl PageTable<Level1> {
         idx: PageTableIndex<Level1>,
         virt: VirtualAddr,
     ) -> Result<PhysicalAddr, FrameError> {
-        self[idx]
+        self.index_pin(idx)
             .frame()
             .map(|f| f.ptr() + u64::from(virt.page_offset()))
     }
 }
 
 impl<LEVEL: PageLevel> PageTable<LEVEL> {
-    pub fn zero(&mut self) {
-        self.entries.iter_mut().for_each(PageEntry::clear);
+    /// # Safety:
+    ///
+    /// The page must not contain a valid used entry
+    pub unsafe fn zero(self: Pin<&mut Self>) {
+        self.get_unchecked_mut()
+            .entries
+            .iter_mut()
+            .for_each(PageEntry::clear);
     }
 }
 
@@ -144,16 +152,22 @@ impl<T: PageLevel> core::fmt::Debug for PageTableIndex<T> {
 }
 
 impl<LEVEL: PageLevel> core::ops::Index<PageTableIndex<LEVEL>> for PageTable<LEVEL> {
-    type Output = PageEntry<LEVEL>;
+    type Output = core::mem::MaybeUninit<PageEntry<LEVEL>>;
 
     fn index(&self, idx: PageTableIndex<LEVEL>) -> &Self::Output {
-        &self.entries[idx.idx]
+        unsafe {
+            &*(&self.entries[idx.idx] as *const PageEntry<LEVEL>
+                as *const core::mem::MaybeUninit<PageEntry<LEVEL>>)
+        }
     }
 }
 
 impl<LEVEL: PageLevel> core::ops::IndexMut<PageTableIndex<LEVEL>> for PageTable<LEVEL> {
     fn index_mut(&mut self, idx: PageTableIndex<LEVEL>) -> &mut Self::Output {
-        &mut self.entries[idx.idx]
+        unsafe {
+            &mut *(&mut self.entries[idx.idx] as *mut PageEntry<LEVEL>
+                as *mut core::mem::MaybeUninit<PageEntry<LEVEL>>)
+        }
     }
 }
 

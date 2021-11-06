@@ -1,16 +1,40 @@
-use core::pin::Pin;
-
 use libx64::{
     address::{PhysicalAddr, VirtualAddr},
     paging::{
-        entry::{Flags, PageEntry},
-        frame::{FrameError, FrameTranslator},
+        entry::Flags,
+        frame::{FrameAllocator, FrameError, FrameTranslator},
         table::{Level1, Level2, Level2Walk, Level3, Level3Walk, Level4, PageLevel, PageTable},
-        NotGiantPageSize, NotHugePageSize, Page4Kb, PageCheck, PageSize,
+        NotGiantPageSize, NotHugePageSize, Page4Kb, PageCheck, PageSize, PinEntryMut, PinTableMut,
     },
 };
 
-use crate::FrameAllocator;
+pub trait WalkResultExt<'a, T, L, const N: u64>
+where
+    PageCheck<N>: PageSize,
+    T: FrameTranslator<L::Prev, Page4Kb>,
+    L: PageLevel,
+{
+    /// If the frame is absent create a new page table with flags using the [`FrameAllocator`]
+    fn or_create<A>(self, flags: Flags, a: &mut A) -> Result<PinTableMut<'a, L>, FrameError>
+    where
+        A: FrameAllocator<N>;
+
+    /// Try to get a page table reference, this must return an error if the page is huge
+    fn try_into_table(self) -> Result<PinTableMut<'a, L>, FrameError>;
+}
+
+pub struct WalkError<'a, T, L> {
+    translator: &'a T,
+    entry: PinEntryMut<'a, L>,
+    error: FrameError,
+}
+
+impl<'a, T, L> WalkError<'a, T, L> {
+    /// Get a reference to the walk error's error.
+    pub const fn into_error(self) -> FrameError {
+        self.error
+    }
+}
 
 pub struct PageWalker<T, const N: u64>
 where
@@ -23,7 +47,11 @@ impl<T, const N: u64> PageWalker<T, N>
 where
     PageCheck<N>: PageSize,
 {
-    pub fn translator(&self) -> &T {
+    pub const fn new(translator: T) -> Self {
+        Self { translator }
+    }
+
+    pub const fn translator(&self) -> &T {
         &self.translator
     }
 }
@@ -36,18 +64,18 @@ where
     T: FrameTranslator<Level3, Page4Kb>,
     T: FrameTranslator<Level2, Page4Kb>,
 {
-    pub fn new(translator: T) -> Self {
-        Self { translator }
+    pub fn level4(&self) -> PinTableMut<'_, Level4> {
+        PageTable::new(libx64::control::cr3(), &self.translator)
     }
 
     pub fn try_translate_addr(&mut self, addr: VirtualAddr) -> Result<PhysicalAddr, FrameError> {
         let page = self.level4();
 
         let entry = page.index_pin_mut(addr.page_table_index(Level4));
-        let page = self.walk_level3(entry).map_err(|(_, err)| err)?;
+        let page = self.walk_level3(entry)?;
 
         let entry = page.index_pin_mut(addr.page_table_index(Level3));
-        let page = match self.walk_level2(entry).map_err(|(_, err)| err)? {
+        let page = match self.walk_level2(entry)? {
             Level3Walk::PageTable(table) => table,
 
             // SAFETY: we hold a valid huge page frame
@@ -58,7 +86,7 @@ where
 
         // SAFETY: Level 3 page table must exist since we check for existence in walk_level2
         let entry = page.index_pin_mut(addr.page_table_index(Level2));
-        let page = match self.walk_level1(entry).map_err(|(_, err)| err)? {
+        let page = match self.walk_level1(entry)? {
             Level2Walk::PageTable(table) => table,
             // SAFETY: we hold a valid huge page frame
             Level2Walk::HugePage(frame) => unsafe {
@@ -72,170 +100,171 @@ where
     }
 
     pub(crate) fn walk_level3<'a>(
-        &self,
-        entry: Pin<&'a mut PageEntry<Level4>>,
-    ) -> Result<Pin<&'a mut PageTable<Level3>>, (Pin<&'a mut PageEntry<Level4>>, FrameError)> {
-        PageTable::<Level4>::walk_next(entry.as_ref(), &self.translator).map_err(|err| (entry, err))
+        &'a self,
+        entry: PinEntryMut<'a, Level4>,
+    ) -> Result<PinTableMut<'a, Level3>, WalkError<'a, T, Level4>> {
+        PageTable::<Level4>::walk_next(entry.as_ref(), &self.translator).map_err(|error| {
+            WalkError {
+                translator: &self.translator,
+                entry,
+                error,
+            }
+        })
     }
 
     pub(crate) fn walk_level2<'a>(
-        &self,
-        entry: Pin<&'a mut PageEntry<Level3>>,
-    ) -> Result<Level3Walk<'a>, (Pin<&'a mut PageEntry<Level3>>, FrameError)> {
-        match PageTable::<Level3>::walk_next(entry.as_ref(), &self.translator) {
-            Ok(table) => Ok(table),
-            Err(err) => Err((entry, err)),
-        }
+        &'a self,
+        entry: PinEntryMut<'a, Level3>,
+    ) -> Result<Level3Walk<'a>, WalkError<'a, T, Level3>> {
+        PageTable::<Level3>::walk_next(entry.as_ref(), &self.translator).map_err(|error| {
+            WalkError {
+                translator: &self.translator,
+                entry,
+                error,
+            }
+        })
     }
 
     pub(crate) fn walk_level1<'a>(
-        &self,
-        entry: Pin<&'a mut PageEntry<Level2>>,
-    ) -> Result<Level2Walk<'a>, (Pin<&'a mut PageEntry<Level2>>, FrameError)> {
-        PageTable::<Level2>::walk_next(entry.as_ref(), &self.translator).map_err(|err| (entry, err))
-    }
-
-    pub fn level4(&self) -> Pin<&mut PageTable<Level4>> {
-        PageTable::new(libx64::control::cr3(), &self.translator)
+        &'a self,
+        entry: PinEntryMut<'a, Level2>,
+    ) -> Result<Level2Walk<'a>, WalkError<'a, T, Level2>> {
+        PageTable::<Level2>::walk_next(entry.as_ref(), &self.translator).map_err(|error| {
+            WalkError {
+                translator: &self.translator,
+                entry,
+                error,
+            }
+        })
     }
 }
 
-pub trait WalkResultExt<'a, L, const N: u64>
+impl<'a, T> WalkResultExt<'a, T, Level3, Page4Kb>
+    for Result<PinTableMut<'a, Level3>, WalkError<'a, T, Level4>>
 where
-    PageCheck<N>: PageSize,
-    L: PageLevel,
+    T: FrameTranslator<Level4, Page4Kb>,
 {
-    fn or_create<T, A>(
-        self,
-        flags: Flags,
-        t: &T,
-        a: &mut A,
-    ) -> Result<Pin<&'a mut PageTable<L>>, FrameError>
+    fn or_create<A>(self, flags: Flags, a: &mut A) -> Result<PinTableMut<'a, Level3>, FrameError>
     where
-        T: FrameTranslator<L::Prev, Page4Kb>,
-        A: FrameAllocator<N>;
-
-    fn try_into_table(self) -> Result<Pin<&'a mut PageTable<L>>, FrameError>;
-}
-
-impl<'a> WalkResultExt<'a, Level3, Page4Kb>
-    for Result<Pin<&'a mut PageTable<Level3>>, (Pin<&'a mut PageEntry<Level4>>, FrameError)>
-{
-    fn or_create<T, A>(
-        self,
-        flags: Flags,
-        t: &T,
-        a: &mut A,
-    ) -> Result<Pin<&'a mut PageTable<Level3>>, FrameError>
-    where
-        T: FrameTranslator<Level4, Page4Kb>,
         A: FrameAllocator<Page4Kb>,
     {
         match self {
             Ok(table) => Ok(table),
-            Err((prev, FrameError::EntryMissing)) => {
-                let frame = a.alloc()?;
+            Err(WalkError {
+                translator,
+                entry: mut prev,
+                error: FrameError::EntryMissing,
+            }) => {
                 trace!("Allocating level3 page table");
+                let frame = a.alloc()?;
 
                 // SAFETY: we just allocated the page so we own it and we are the only one
                 // modifying this entry which will be valid.
                 unsafe {
-                    let prev = prev.get_unchecked_mut();
-                    prev.set_flags(flags | Flags::PRESENT | Flags::RW);
-                    prev.set_frame(frame);
+                    prev.as_mut().set_flags(flags | Flags::PRESENT | Flags::RW);
+                    prev.as_mut().set_frame(frame);
 
-                    let mut page = t.translate_frame(frame);
-                    page.as_mut().get_unchecked_mut().zero();
+                    let mut page = translator.translate_frame(frame);
+                    page.as_mut().zero();
                     Ok(page)
                 }
             }
-            Err((_, err)) => Err(err),
+            Err(error) => Err(error.into_error()),
         }
     }
 
-    fn try_into_table(self) -> Result<Pin<&'a mut PageTable<Level3>>, FrameError> {
-        self.map_err(|(_, err)| err)
+    fn try_into_table(self) -> Result<PinTableMut<'a, Level3>, FrameError> {
+        Ok(self?)
     }
 }
 
-impl<'a> WalkResultExt<'a, Level2, Page4Kb>
-    for Result<Level3Walk<'a>, (Pin<&'a mut PageEntry<Level3>>, FrameError)>
+impl<'a, T> WalkResultExt<'a, T, Level2, Page4Kb>
+    for Result<Level3Walk<'a>, WalkError<'a, T, Level3>>
+where
+    T: FrameTranslator<Level3, Page4Kb>,
 {
-    fn or_create<T, A>(
-        self,
-        flags: Flags,
-        t: &T,
-        a: &mut A,
-    ) -> Result<Pin<&'a mut PageTable<Level2>>, FrameError>
+    fn or_create<A>(self, flags: Flags, a: &mut A) -> Result<PinTableMut<'a, Level2>, FrameError>
     where
-        T: FrameTranslator<Level3, Page4Kb>,
         A: FrameAllocator<Page4Kb>,
     {
         match self {
             Ok(table) => Ok(table.try_into_table()?),
-            Err((prev, FrameError::EntryMissing)) => {
-                let frame = a.alloc()?;
+
+            Err(WalkError {
+                translator,
+                entry: mut prev,
+                error: FrameError::EntryMissing,
+            }) => {
                 trace!("Allocating level2 page table");
+                let frame = a.alloc()?;
 
                 // SAFETY: we just allocated the page so we own it and we are the only one
                 // modifying this entry which will be valid.
                 unsafe {
-                    let prev = prev.get_unchecked_mut();
-                    prev.set_flags(flags | Flags::PRESENT | Flags::RW);
-                    prev.set_frame(frame);
+                    prev.as_mut().set_flags(flags | Flags::PRESENT | Flags::RW);
+                    prev.as_mut().set_frame(frame);
 
-                    let mut page = t.translate_frame(frame);
-                    page.as_mut().get_unchecked_mut().zero();
+                    let mut page = translator.translate_frame(frame);
+                    page.as_mut().zero();
                     Ok(page)
                 }
             }
-            Err((_, err)) => Err(err),
+            Err(error) => Err(error.into_error()),
         }
     }
 
-    fn try_into_table(self) -> Result<Pin<&'a mut PageTable<Level2>>, FrameError> {
-        self.map_err(|(_, err)| err)
+    fn try_into_table(self) -> Result<PinTableMut<'a, Level2>, FrameError> {
+        self.map_err(WalkError::into_error)
             .and_then(|table| table.try_into_table())
     }
 }
 
-impl<'a> WalkResultExt<'a, Level1, Page4Kb>
-    for Result<Level2Walk<'a>, (Pin<&'a mut PageEntry<Level2>>, FrameError)>
+impl<'a, T> WalkResultExt<'a, T, Level1, Page4Kb>
+    for Result<Level2Walk<'a>, WalkError<'a, T, Level2>>
+where
+    T: FrameTranslator<Level2, Page4Kb>,
 {
-    fn or_create<T, A>(
-        self,
-        flags: Flags,
-        t: &T,
-        a: &mut A,
-    ) -> Result<Pin<&'a mut PageTable<Level1>>, FrameError>
+    fn or_create<A>(self, flags: Flags, a: &mut A) -> Result<PinTableMut<'a, Level1>, FrameError>
     where
-        T: FrameTranslator<Level2, Page4Kb>,
         A: FrameAllocator<Page4Kb>,
     {
         match self {
             Ok(table) => Ok(table.try_into_table()?),
-            Err((prev, FrameError::EntryMissing)) => {
-                let frame = a.alloc()?;
+            Err(WalkError {
+                translator,
+                entry: mut prev,
+                error: FrameError::EntryMissing,
+            }) => {
                 trace!("Allocating level1 page table");
+                let frame = a.alloc()?;
 
                 // SAFETY: we just allocated the page so we own it and we are the only one
                 // modifying this entry which will be valid.
                 unsafe {
-                    let prev = prev.get_unchecked_mut();
-                    prev.set_flags(flags | Flags::PRESENT | Flags::RW);
-                    prev.set_frame(frame);
+                    prev.as_mut().set_flags(flags | Flags::PRESENT | Flags::RW);
+                    prev.as_mut().set_frame(frame);
 
-                    let mut page = t.translate_frame(frame);
-                    page.as_mut().get_unchecked_mut().zero();
+                    let mut page = translator.translate_frame(frame);
+                    page.as_mut().zero();
                     Ok(page)
                 }
             }
-            Err((_, err)) => Err(err),
+            Err(error) => Err(error.into_error()),
         }
     }
 
-    fn try_into_table(self) -> Result<Pin<&'a mut PageTable<Level1>>, FrameError> {
-        self.map_err(|(_, err)| err)
+    fn try_into_table(self) -> Result<PinTableMut<'a, Level1>, FrameError> {
+        self.map_err(WalkError::into_error)
             .and_then(|table| table.try_into_table())
+    }
+}
+
+impl<'a, T, L> From<WalkError<'a, T, L>> for FrameError
+where
+    L: PageLevel,
+    T: FrameTranslator<L, Page4Kb>,
+{
+    fn from(this: WalkError<'a, T, L>) -> Self {
+        this.into_error()
     }
 }
