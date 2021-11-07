@@ -23,27 +23,27 @@ klazy! {
 }
 
 pub extern "x86-interrupt" fn int3(f: InterruptFrame) {
-    kprintln!("{:#?}", f)
+    kprintln!("{:#?}", f);
 }
 
 pub extern "x86-interrupt" fn double_fault(f: InterruptFrame, code: u64) -> ! {
-    panic!("#DF (code: {}) {:#?}", code, f)
+    panic!("#DF (code: {}) {:#?}", code, f);
 }
 
 pub extern "x86-interrupt" fn page_fault(f: InterruptFrame, code: u64) {
     let code = PageFaultErrorCode::from_bits_truncate(code);
-    panic!("#PF (code: {:?}) {:#?}", code, f)
+    panic!("#PF (code: {:?}) {:#?}", code, f);
 }
 
 #[interrupt_list::interrupt_list(IntIdx)]
 pub mod user {
     use super::InterruptFrame;
-    use kcore::{klazy, sync::mutex::SpinMutex};
-    use pic::chained::ChainedPic;
+    use kcore::{klazy, sync::SpinMutex};
+    use pic::chained::Chained;
 
     klazy! {
-        pub ref static PICS: SpinMutex<ChainedPic<0x20, 0x28>> = {
-            SpinMutex::new(ChainedPic::<0x20, 0x28>::uninit())
+        pub ref static PICS: SpinMutex<Chained<0x20, 0x28>> = {
+            SpinMutex::new(Chained::<0x20, 0x28>::uninit())
         };
     }
 

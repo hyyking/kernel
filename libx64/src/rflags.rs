@@ -75,6 +75,7 @@ bitflags! {
     }
 }
 
+#[must_use]
 #[inline]
 pub fn rflags() -> RFlags {
     let r: u64;

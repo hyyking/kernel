@@ -1,7 +1,10 @@
 use core::marker::PhantomData;
 
+#[derive(Debug, Clone, Copy)]
 pub struct PortReadWrite;
+#[derive(Debug, Clone, Copy)]
 pub struct PortRead;
+#[derive(Debug, Clone, Copy)]
 pub struct PortWrite;
 
 pub trait PortAccess {}
@@ -83,6 +86,7 @@ impl PortValue for u32 {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Port<V, A> {
     base: u16,
     _p: PhantomData<(V, A)>,
@@ -93,6 +97,8 @@ pub type RPort<T> = Port<T, PortRead>;
 pub type WPort<T> = Port<T, PortWrite>;
 
 impl<V, A> Port<V, A> {
+    #[inline]
+    #[must_use]
     pub const fn new(base: u16) -> Self {
         Port {
             base,
@@ -106,6 +112,7 @@ impl<V: PortValue> Port<V, PortReadWrite> {
     ///
     /// You shall not read from an invalid port
     #[inline]
+    #[must_use]
     pub unsafe fn read(&self) -> V {
         V::read(self.base)
     }
@@ -115,7 +122,7 @@ impl<V: PortValue> Port<V, PortReadWrite> {
     /// You shall not write to an invalid port
     #[inline]
     pub unsafe fn write(&mut self, value: V) {
-        V::write(self.base, value)
+        V::write(self.base, value);
     }
 }
 
@@ -124,6 +131,7 @@ impl<V: PortValue> Port<V, PortRead> {
     ///
     /// You shall not read from an invalid port
     #[inline]
+    #[must_use]
     pub unsafe fn read(&self) -> V {
         V::read(self.base)
     }

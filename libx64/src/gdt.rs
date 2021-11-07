@@ -32,19 +32,24 @@ impl<'a> core::fmt::Debug for GdtPtr<'a> {
 }
 
 impl GlobalDescriptorTable {
+    #[inline]
+    #[must_use]
     pub const fn new() -> Self {
         Self {
-            entries: [0u64; 8],
+            entries: [0_u64; 8],
             at: 0,
         }
     }
 
     /// Get a reference to the global descriptor table's entries.
     #[inline]
+    #[must_use]
     pub fn entries(&self) -> &[u64] {
         &self.entries[..usize::from(self.at)]
     }
 
+    #[inline]
+    #[must_use]
     pub fn lgdt_ptr(&self) -> GdtPtr<'_> {
         GdtPtr {
             limit: self.at * (core::mem::size_of::<u64>() as u16) - 1,
@@ -96,6 +101,7 @@ pub fn lgdt(gdt: &GdtPtr) {
 }
 
 #[inline]
+#[must_use]
 pub fn sgdt() -> GdtPtr<'static> {
     let mut gdt = GdtPtr {
         limit: 0,

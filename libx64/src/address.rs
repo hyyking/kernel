@@ -7,7 +7,11 @@ use crate::paging::table::{PageLevel, PageTableIndex};
 pub struct VirtualAddr(u64);
 
 impl VirtualAddr {
+    /// # Panics
+    ///
+    /// Panic if the address is not canonical
     #[inline]
+    #[must_use]
     pub const fn new(addr: u64) -> Self {
         match addr >> 47 {
             0 | 0x1FFFF => Self(addr),
@@ -17,43 +21,58 @@ impl VirtualAddr {
     }
 
     #[inline]
+    #[must_use]
     pub fn ptr<T>(&self) -> Option<NonNull<T>> {
         NonNull::new(self.0 as *mut T)
     }
 
     #[inline]
+    #[must_use]
     pub fn from_ptr<T>(ptr: *const T) -> Self {
         Self::new(ptr as u64)
     }
 
     #[inline]
+    #[must_use]
     pub const fn as_u64(self) -> u64 {
         self.0
     }
 
     #[inline]
+    #[must_use]
     pub const fn null() -> Self {
         Self(0)
     }
 
     #[inline]
+    #[must_use]
     pub const fn is_null(self) -> bool {
         self.0 == 0
     }
 
     #[inline]
+    #[must_use]
+    #[allow(clippy::needless_pass_by_value)]
     pub fn page_table_index<T: PageLevel>(self, _level: T) -> PageTableIndex<T> {
         PageTableIndex::new_truncate((self.0 >> 12 >> ((T::VALUE - 1) * 9)) as u16)
     }
 
     #[inline]
+    #[must_use]
     pub const fn page_offset(self) -> u16 {
         (self.0 as u16) % (1 << 12)
     }
 
     #[inline]
+    #[must_use]
     pub const fn align_down(self, align: u64) -> Self {
         Self(align_down(self.0, align))
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn align_up(self, align: u64) -> Self {
+        Self(align_up(self.0, align))
     }
 }
 
@@ -71,33 +90,45 @@ pub struct PhysicalAddr(u64);
 
 impl PhysicalAddr {
     #[inline]
+    #[must_use]
     pub const fn new(addr: u64) -> Self {
         Self(addr % (1 << 52))
     }
 
     #[inline]
+    #[must_use]
     pub fn ptr<T>(&self) -> Option<NonNull<T>> {
         NonNull::new(self.0 as *mut T)
     }
 
     #[inline]
+    #[must_use]
     pub fn from_ptr<T>(ptr: *const T) -> Self {
         Self::new(ptr as u64)
     }
 
     #[inline]
+    #[must_use]
     pub const fn as_u64(&self) -> u64 {
         self.0
     }
 
     #[inline]
+    #[must_use]
     pub const fn null() -> Self {
         Self(0)
     }
 
     #[inline]
+    #[must_use]
     pub const fn align_down(self, align: u64) -> Self {
         Self(align_down(self.0, align))
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn align_up(self, align: u64) -> Self {
+        Self(align_up(self.0, align))
     }
 }
 
@@ -110,13 +141,13 @@ impl core::fmt::Debug for PhysicalAddr {
 }
 
 #[inline]
-pub const fn align_down(ptr: u64, align: u64) -> u64 {
+const fn align_down(ptr: u64, align: u64) -> u64 {
     debug_assert!(align.is_power_of_two());
     ptr & !(align - 1)
 }
 
 #[inline]
-pub const fn align_up(addr: u64, align: u64) -> u64 {
+const fn align_up(addr: u64, align: u64) -> u64 {
     debug_assert!(align.is_power_of_two());
     let align_mask = align - 1;
     if addr & align_mask != 0 {

@@ -26,6 +26,8 @@ where
 {
     const SLOT_BYTES: usize = (N as usize) / 8;
 
+    #[must_use]
+    #[inline]
     pub const fn from_page(page: Page<Page4Kb>) -> Self {
         Self {
             base: unsafe { NonNull::new_unchecked(page.ptr().as_u64() as *mut u8) },
@@ -34,15 +36,21 @@ where
         }
     }
 
+    #[must_use]
+    #[inline]
     pub const fn len(&self) -> usize {
         self.len as usize
     }
 
+    #[must_use]
+    #[inline]
     pub const fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    pub const fn capacity(&self) -> usize {
+    #[must_use]
+    #[inline]
+    pub const fn capacity() -> usize {
         (Page4Kb / N) as usize
     }
 
@@ -52,10 +60,10 @@ where
         }
 
         let result = if self.len() % 2 == 0 {
-            let mut range = 0..(self.capacity() / 2);
+            let mut range = 0..(Self::capacity() / 2);
             range.find_map(|i| self.try_alloc_at(i))
         } else {
-            let range = (self.capacity() / 2)..self.capacity();
+            let range = (Self::capacity() / 2)..Self::capacity();
             range.rev().find_map(|i| self.try_alloc_at(i))
         };
         result.ok_or(AllocError)
@@ -84,7 +92,7 @@ where
         let ptr = ptr.as_ptr() as u64;
         let this = self.base.as_ptr() as u64;
 
-        let offset = (ptr - this) as usize / Self::SLOT_BYTES;
+        let offset = usize::try_from(ptr - this).unwrap() / Self::SLOT_BYTES;
         let mask = 1 << offset;
 
         if mask & self.mask != 0 {
@@ -103,12 +111,12 @@ where
             .field("base", &format_args!("{:#x}", self.base.as_ptr() as u64))
             .field("mask", &format_args!("{:#034b}", self.mask))
             .field("len", &self.len)
-            .field("cap", &self.capacity())
+            .field("cap", &Self::capacity())
             .finish()
     }
 }
 
-unsafe impl<const N: u64> Allocator for crate::sync::mutex::SpinMutex<SlabPage<N>>
+unsafe impl<const N: u64> Allocator for crate::sync::SpinMutex<SlabPage<N>>
 where
     SlabCheck<N>: SlabSize,
 {
@@ -122,6 +130,6 @@ where
 
     unsafe fn deallocate(&self, ptr: core::ptr::NonNull<u8>, layout: core::alloc::Layout) {
         assert!(layout.size() <= SlabPage::<N>::SLOT_BYTES);
-        libx64::without_interrupts(|| SlabPage::<N>::deallocate(&mut *self.lock(), ptr, layout))
+        libx64::without_interrupts(|| SlabPage::<N>::deallocate(&mut *self.lock(), ptr, layout));
     }
 }

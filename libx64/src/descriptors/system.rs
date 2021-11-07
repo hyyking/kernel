@@ -28,7 +28,9 @@ pub struct SystemSegmentDescriptor {
 }
 
 impl SystemSegmentDescriptor {
-    pub fn zero() -> Self {
+    #[inline]
+    #[must_use]
+    pub const fn zero() -> Self {
         Self {
             limit_low: 0,
             base_low: 0,
@@ -41,7 +43,9 @@ impl SystemSegmentDescriptor {
         }
     }
 
-    pub fn get_base(&self) -> VirtualAddr {
+    #[inline]
+    #[must_use]
+    pub const fn get_base(&self) -> VirtualAddr {
         VirtualAddr::new(
             self.base_low as u64
                 | (self.base_middle as u64) << 16
@@ -58,6 +62,8 @@ impl SystemSegmentDescriptor {
         self.base_higher = (addr >> 32) as u32;
     }
 
+    #[inline]
+    #[must_use]
     pub const fn get_limit(&self) -> u32 {
         self.limit_low as u32 | ((self.limit_flags.get_limit_high() as u32) << 16)
     }

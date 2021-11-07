@@ -2,7 +2,7 @@
 
 use core::fmt::Write;
 
-use kcore::{klazy, sync::mutex::SpinMutex};
+use kcore::{klazy, sync::SpinMutex};
 use serialuart16550::SerialPort;
 
 klazy! {
@@ -26,6 +26,9 @@ macro_rules! dbg {
     }};
 }
 
+/// # Errors
+///
+/// Forwards [`log::set_logger`] error
 pub fn init() -> Result<(), log::SetLoggerError> {
     log::set_logger(&LOGGER)?;
     log::set_max_level(log::LevelFilter::Trace);

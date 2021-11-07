@@ -8,9 +8,9 @@ use libx64::paging::{
     Page4Kb, PageCheck, PageSize,
 };
 
-use crate::sync::mutex::SpinMutex;
+use crate::sync::SpinMutex;
 
-pub struct MappedResource<T, const P: u64>
+pub struct Mapped<T, const P: u64>
 where
     PageCheck<P>: PageSize,
 {
@@ -18,7 +18,7 @@ where
     page: PageRange<P>,
 }
 
-impl<T, const P: u64> MappedResource<T, P>
+impl<T, const P: u64> Mapped<T, P>
 where
     PageCheck<P>: PageSize,
 {
@@ -28,21 +28,24 @@ where
     pub const fn resource(&self) -> &T {
         &self.resource
     }
-    pub const fn pages(&self) -> PageRange<P> {
-        self.page
+    pub const fn pages(&self) -> &PageRange<P> {
+        &self.page
     }
 }
 
-impl<T, const N: u64> MappedResource<T, N>
+impl<T, const N: u64> Mapped<T, N>
 where
     PageCheck<N>: PageSize,
 {
+    /// # Errors
+    ///
+    /// Errors if the allocator doesn't have enought frames
     pub fn map<M, A>(&self, mapper: &mut M, alloc: &mut A) -> Result<(), FrameError>
     where
         A: FrameAllocator<N> + FrameAllocator<Page4Kb>,
         M: PageMapper<A, N>,
     {
-        self.pages().try_for_each(|page| {
+        self.page.clone().try_for_each(|page| {
             mapper.map(
                 page,
                 alloc.alloc()?,
@@ -56,11 +59,11 @@ where
     }
 }
 
-// TODO: SOUNDNESS
-unsafe impl<T, const P: u64> Sync for MappedResource<SpinMutex<T>, P> where PageCheck<P>: PageSize {}
-unsafe impl<T, const P: u64> Send for MappedResource<SpinMutex<T>, P> where PageCheck<P>: PageSize {}
+// TODO: SOUNDNESS, but needed for GlobalAlloc
+unsafe impl<T, const P: u64> Sync for Mapped<SpinMutex<T>, P> where PageCheck<P>: PageSize {}
+unsafe impl<T, const P: u64> Send for Mapped<SpinMutex<T>, P> where PageCheck<P>: PageSize {}
 
-unsafe impl<T, const P: u64> GlobalAlloc for MappedResource<T, P>
+unsafe impl<T, const P: u64> GlobalAlloc for Mapped<T, P>
 where
     T: Allocator,
     PageCheck<P>: PageSize,
@@ -74,7 +77,7 @@ where
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        <T as Allocator>::deallocate(self.resource(), NonNull::new_unchecked(ptr), layout)
+        <T as Allocator>::deallocate(self.resource(), NonNull::new_unchecked(ptr), layout);
     }
 
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
@@ -105,7 +108,7 @@ where
     }
 }
 
-unsafe impl<T, const P: u64> Allocator for MappedResource<T, P>
+unsafe impl<T, const P: u64> Allocator for Mapped<T, P>
 where
     T: Allocator,
     PageCheck<P>: PageSize,
@@ -119,7 +122,7 @@ where
     }
 
     unsafe fn deallocate(&self, ptr: core::ptr::NonNull<u8>, layout: Layout) {
-        <T as Allocator>::deallocate(self.resource(), ptr, layout)
+        <T as Allocator>::deallocate(self.resource(), ptr, layout);
     }
 
     unsafe fn grow(

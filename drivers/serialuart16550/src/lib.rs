@@ -26,6 +26,7 @@ bitflags! {
 
 macro_rules! wait_for {
     ($cond:expr) => {
+        #[allow(clippy::semicolon_if_nothing_returned)]
         while (!$cond) {
             core::hint::spin_loop()
         }
@@ -47,6 +48,7 @@ impl SerialPort {
     /// # Safety
     /// This function is unsafe because the caller must ensure that the given base address
     /// really points to a serial port device.
+    #[must_use]
     pub const unsafe fn new(base: u16) -> Self {
         Self {
             data: Port::new(base),
@@ -103,7 +105,7 @@ impl SerialPort {
                     wait_for!(self.line_sts().contains(LineStsFlags::OUTPUT_EMPTY));
                     self.data.write(b' ');
                     wait_for!(self.line_sts().contains(LineStsFlags::OUTPUT_EMPTY));
-                    self.data.write(8)
+                    self.data.write(8);
                 }
                 _ => {
                     wait_for!(self.line_sts().contains(LineStsFlags::OUTPUT_EMPTY));

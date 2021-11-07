@@ -20,6 +20,7 @@ impl PicState for Raw {}
 impl PicFinalState for Raw {}
 impl PicStartState for Raw {}
 
+#[derive(Debug, Clone)]
 pub struct RemapUninit;
 impl PicState for RemapUninit {}
 impl PicStartState for RemapUninit {}
@@ -48,7 +49,8 @@ impl PicFinalState for RemapInit {}
 /// 0x21         | Primary PIC Interrupt Mask Register and Data Register          
 /// 0xA0         | Secondary (Slave) PIC Command and Status Register              
 /// 0xA1         | Secondary (Slave) PIC Interrupt Mask Register and Data Register
-pub struct Pic<S: PicState, const OFFSET: u8> {
+#[derive(Clone)]
+pub struct Pic<S, const OFFSET: u8> {
     command: RWPort<u8>,
     data: RWPort<u8>,
     _s: core::marker::PhantomData<S>,
@@ -61,6 +63,7 @@ where
     /// # Safety
     ///
     /// You must assure the offset are within the IDT range
+    #[must_use]
     pub unsafe fn new(command: u16, data: u16) -> Self {
         Self {
             command: RWPort::new(command),
@@ -69,14 +72,17 @@ where
         }
     }
 
+    #[must_use]
     pub fn master() -> Self {
         unsafe { Self::new(0x20, 0x21) }
     }
 
+    #[must_use]
     pub fn slave() -> Self {
         unsafe { Self::new(0xA0, 0xA1) }
     }
 
+    #[must_use]
     pub fn read_mask(&self) -> u8 {
         unsafe { self.data.read() }
     }
@@ -174,10 +180,12 @@ where
     }
 }
 
-impl<S: PicState, const OFFSET: u8> Pic<S, OFFSET> {
+impl<S, const OFFSET: u8> Pic<S, OFFSET> {
     // End of interupt command
 
-    pub fn handles_interrupt(&self, id: u8) -> bool {
+    #[allow(clippy::unused_self)]
+    #[must_use]
+    pub const fn handles_interrupt(&self, id: u8) -> bool {
         OFFSET <= id && id < OFFSET + 8
     }
 }

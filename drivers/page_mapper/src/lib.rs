@@ -27,12 +27,16 @@ pub struct OffsetMapper {
 }
 
 impl OffsetMapper {
+    #[must_use]
     pub fn new(offset: VirtualAddr) -> Self {
         Self {
             walker: PageWalker::new(OffsetWalker::new(offset)),
         }
     }
 
+    /// # Errors
+    ///
+    /// Errors if we hit a missing page
     pub fn try_translate_addr(&mut self, addr: VirtualAddr) -> Result<PhysicalAddr, FrameError> {
         self.walker.try_translate_addr(addr)
     }

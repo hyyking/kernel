@@ -91,7 +91,16 @@ pub fn user_interrupt(initial_attr: TokenStream, item: TokenStream) -> TokenStre
         .into_compile_error()
         .into();
     }
-    let lit = attrs.into_iter().next().unwrap();
+    let lit = if let Some(lit) = attrs.into_iter().next() {
+        lit
+    } else {
+        return syn::Error::new_spanned(
+            proc_macro2::TokenStream::from(initial_attr),
+            "Wrong number of arguments for macro, expected a single interrupt number",
+        )
+        .into_compile_error()
+        .into();
+    };
 
     match lit {
         NestedMeta::Lit(Lit::Int(int)) => {
@@ -139,11 +148,11 @@ impl syn::parse::Parse for MacroState {
         let module_vis = f.vis.clone();
 
         let all = f.content.as_ref().unwrap().1.iter().map(|i| match i {
-            e @ syn::Item::Const(_) => Ok(e),
-            e @ syn::Item::Static(_) => Ok(e),
-            e @ syn::Item::Macro(_) => Ok(e),
-            e @ syn::Item::Fn(_) => Ok(e),
-            e @ syn::Item::Use(_) => Ok(e),
+            e @ (syn::Item::Const(_) |
+                 syn::Item::Static(_) |
+                 syn::Item::Macro(_) | 
+                 syn::Item::Fn(_) |
+                 syn::Item::Use(_)) => Ok(e),
             _ => Err(syn::Error::new_spanned(
                 i,
                 "Item kind is not allow within the module, you can only define constants and x86 interrupt functions",
@@ -177,10 +186,10 @@ impl syn::parse::Parse for MacroState {
                     interrupts.push(InterruptInfo { ident, number });
                     allowed.push(syn::Item::Fn(f));
                 }
-                i @ syn::Item::Const(_)
-                | i @ syn::Item::Use(_)
-                | i @ syn::Item::Static(_)
-                | i @ syn::Item::Macro(_) => allowed.push(i),
+                i @ (syn::Item::Const(_)
+                | syn::Item::Use(_)
+                | syn::Item::Static(_)
+                | syn::Item::Macro(_)) => allowed.push(i),
                 _ => unreachable!(),
             }
         }

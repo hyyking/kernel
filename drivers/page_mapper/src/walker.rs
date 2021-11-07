@@ -8,7 +8,7 @@ use libx64::{
     },
 };
 
-pub trait WalkResultExt<'a, T, L, const N: u64>
+pub(crate) trait WalkResultExt<'a, T, L, const N: u64>
 where
     PageCheck<N>: PageSize,
     T: FrameTranslator<L::Prev, Page4Kb>,
@@ -23,7 +23,7 @@ where
     fn try_into_table(self) -> Result<PinTableMut<'a, L>, FrameError>;
 }
 
-pub struct WalkError<'a, T, L> {
+pub(crate) struct WalkError<'a, T, L> {
     translator: &'a T,
     entry: PinEntryMut<'a, L>,
     error: FrameError,
@@ -31,12 +31,12 @@ pub struct WalkError<'a, T, L> {
 
 impl<'a, T, L> WalkError<'a, T, L> {
     /// Get a reference to the walk error's error.
-    pub const fn into_error(self) -> FrameError {
+    pub(crate) const fn into_error(self) -> FrameError {
         self.error
     }
 }
 
-pub struct PageWalker<T, const N: u64>
+pub(crate) struct PageWalker<T, const N: u64>
 where
     PageCheck<N>: PageSize,
 {
@@ -47,28 +47,27 @@ impl<T, const N: u64> PageWalker<T, N>
 where
     PageCheck<N>: PageSize,
 {
-    pub const fn new(translator: T) -> Self {
+    pub(crate) const fn new(translator: T) -> Self {
         Self { translator }
-    }
-
-    pub const fn translator(&self) -> &T {
-        &self.translator
     }
 }
 
 impl<T, const N: u64> PageWalker<T, N>
 where
     PageCheck<N>: NotHugePageSize + NotGiantPageSize,
-    T: FrameTranslator<(), Page4Kb>,
-    T: FrameTranslator<Level4, Page4Kb>,
-    T: FrameTranslator<Level3, Page4Kb>,
-    T: FrameTranslator<Level2, Page4Kb>,
+    T: FrameTranslator<(), Page4Kb>
+        + FrameTranslator<Level4, Page4Kb>
+        + FrameTranslator<Level3, Page4Kb>
+        + FrameTranslator<Level2, Page4Kb>,
 {
-    pub fn level4(&self) -> PinTableMut<'_, Level4> {
+    pub(crate) fn level4(&self) -> PinTableMut<'_, Level4> {
         PageTable::new(libx64::control::cr3(), &self.translator)
     }
 
-    pub fn try_translate_addr(&mut self, addr: VirtualAddr) -> Result<PhysicalAddr, FrameError> {
+    pub(crate) fn try_translate_addr(
+        &mut self,
+        addr: VirtualAddr,
+    ) -> Result<PhysicalAddr, FrameError> {
         let page = self.level4();
 
         let entry = page.index_pin_mut(addr.page_table_index(Level4));
@@ -215,7 +214,7 @@ where
 
     fn try_into_table(self) -> Result<PinTableMut<'a, Level2>, FrameError> {
         self.map_err(WalkError::into_error)
-            .and_then(|table| table.try_into_table())
+            .and_then(Level3Walk::try_into_table)
     }
 }
 
@@ -255,7 +254,7 @@ where
 
     fn try_into_table(self) -> Result<PinTableMut<'a, Level1>, FrameError> {
         self.map_err(WalkError::into_error)
-            .and_then(|table| table.try_into_table())
+            .and_then(Level2Walk::try_into_table)
     }
 }
 

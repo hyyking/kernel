@@ -26,6 +26,8 @@ pub enum IstIndex {
 }
 
 impl From<IstIndex> for usize {
+    #[inline]
+    #[must_use]
     fn from(val: IstIndex) -> Self {
         usize::from(val as u16)
     }
@@ -64,6 +66,8 @@ impl IgFlags {
 }
 
 impl InterruptGateDescriptor {
+    #[inline]
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             target_low: 0,
@@ -75,7 +79,9 @@ impl InterruptGateDescriptor {
         }
     }
 
-    pub fn get_target(&self) -> VirtualAddr {
+    #[inline]
+    #[must_use]
+    pub const fn get_target(&self) -> VirtualAddr {
         VirtualAddr::new(
             self.target_low as u64
                 | (self.target_middle as u64) << 16

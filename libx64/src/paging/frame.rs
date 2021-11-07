@@ -12,6 +12,9 @@ pub trait FrameAllocator<const N: u64>
 where
     PageCheck<N>: PageSize,
 {
+    /// # Errors
+    ///
+    /// Should error if there are no frames left
     fn alloc(&mut self) -> Result<PhysicalFrame<N>, FrameError>;
 }
 
@@ -49,12 +52,16 @@ impl<const N: u64> PhysicalFrame<N>
 where
     PageCheck<N>: PageSize,
 {
+    #[inline]
+    #[must_use]
     pub const fn containing(addr: PhysicalAddr) -> Self {
         Self {
             addr: addr.align_down(N),
         }
     }
 
+    #[inline]
+    #[must_use]
     pub const fn ptr(self) -> PhysicalAddr {
         self.addr
     }
