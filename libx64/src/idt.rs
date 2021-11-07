@@ -46,6 +46,8 @@ pub struct Entry<H> {
 }
 
 impl<H> Entry<H> {
+    #[inline]
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             igd: InterruptGateDescriptor::new(),
@@ -113,6 +115,8 @@ pub fn lidt(ptr: &IdtPtr<'_>) {
 }
 
 impl InterruptDescriptorTable {
+    #[inline]
+    #[must_use]
     pub fn new() -> Self {
         Self {
             divide_by_zero: Entry::new(),
@@ -148,6 +152,8 @@ impl InterruptDescriptorTable {
         }
     }
 
+    #[inline]
+    #[must_use]
     pub fn lidt_ptr(&self) -> IdtPtr<'_> {
         IdtPtr {
             limit: (core::mem::size_of::<Self>() - 1) as u16,

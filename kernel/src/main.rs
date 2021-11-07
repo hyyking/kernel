@@ -6,6 +6,7 @@
 #![reexport_test_harness_main = "test_main"]
 #![no_main]
 #![no_std]
+#![allow(clippy::cast_possible_truncation, clippy::missing_panics_doc)]
 
 #[macro_use]
 extern crate vga;
@@ -44,7 +45,7 @@ pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
         let mut walker = OffsetMapper::new(pmo);
 
         dbg!(walker
-            .try_translate_addr(VirtualAddr::new(0x201008))
+            .try_translate_addr(VirtualAddr::new(0x0020_1008))
             .unwrap());
         dbg!(walker.try_translate_addr(pmo).unwrap());
         dbg!(walker
@@ -57,10 +58,10 @@ pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
             .map(&mut walker, &mut alloc)
             .expect("unable to map");
 
-        let test = vec![1u128];
+        let test = vec![1_u128];
         dbg!(test);
-        let test2 = alloc::boxed::Box::new(2u64);
-        let test = alloc::boxed::Box::new(3u64);
+        let test2 = alloc::boxed::Box::new(2_u64);
+        let test = alloc::boxed::Box::new(3_u64);
         debug!("{:#?}", &*crate::kalloc::GLOBAL_ALLOC.resource().lock());
         drop(test2);
 

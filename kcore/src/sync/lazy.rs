@@ -1,13 +1,13 @@
 use core::cell::UnsafeCell;
 use core::ops::Deref;
 
-use crate::sync::mutex::SpinMutex;
+use crate::sync::SpinMutex;
 
 #[macro_export]
 macro_rules! klazy {
     ( $(#[$attr:meta])* $v:vis ref static $name:ident: $t:ty = $b:expr;) => {
         $(#[$attr])*
-        $v static $name: $crate::sync::lazy::Lazy<$t> = $crate::sync::lazy::Lazy::new(|| $b);
+        $v static $name: $crate::sync::Lazy<$t> = $crate::sync::Lazy::new(|| $b);
     }
 }
 

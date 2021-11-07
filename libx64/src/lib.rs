@@ -1,6 +1,13 @@
 #![feature(asm, never_type)]
 #![feature(abi_x86_interrupt)]
 #![no_std]
+#![allow(
+    clippy::module_name_repetitions,
+    clippy::cast_lossless,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss
+)]
 
 pub mod address;
 pub mod control;

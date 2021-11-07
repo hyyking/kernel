@@ -86,6 +86,8 @@ macro_rules! bitfield {
     }
 }
 
+#[doc(hidden)]
+#[must_use]
 pub const fn decompose_range(range: core::ops::Range<usize>) -> (usize, usize) {
     (range.start, range.end)
 }

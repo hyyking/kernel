@@ -2,7 +2,7 @@
 
 use core::fmt::{self, Write};
 
-use kcore::{klazy, ptr::volatile::Volatile, sync::mutex::SpinMutex};
+use kcore::{klazy, ptr::volatile::Volatile, sync::SpinMutex};
 
 klazy! {
     pub ref static DRIVER: SpinMutex<VgaDriver<80, 25>> = SpinMutex::new(VgaDriver::new());
@@ -22,7 +22,7 @@ macro_rules! kprintln {
 pub fn _kprint(args: fmt::Arguments) {
     libx64::without_interrupts(|| {
         let _ = DRIVER.lock().cursor().write_fmt(args);
-    })
+    });
 }
 
 #[allow(dead_code)]
@@ -82,6 +82,7 @@ impl<const C: usize, const L: usize> VgaDriver<C, L> {
     const TAB_SIZE: usize = 4;
 
     #[allow(clippy::transmute_ptr_to_ref)]
+    #[must_use]
     pub fn new() -> Self {
         Self {
             buffer: unsafe { core::mem::transmute(0xb8000 as *mut Self) },
@@ -100,6 +101,9 @@ impl<'a, const C: usize, const L: usize> Cursor<'a, C, L> {
         Volatile::new(&mut self.driver.buffer[y][x])
     }
 
+    /// # Errors
+    ///
+    /// Fails if the character is not supported
     pub fn write_character(&mut self, c: char, fg: Color, bg: Color) -> core::fmt::Result {
         if !c.is_ascii() {
             return Err(core::fmt::Error);

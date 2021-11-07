@@ -124,14 +124,18 @@ bitfield::bitfield! {
 }
 
 impl RawPageEntry {
+    #[inline]
+    #[must_use]
     pub const fn set_address(self, addr: PhysicalAddr) -> Self {
         Self(self.as_u64() | addr.as_u64())
     }
-
+    #[inline]
+    #[must_use]
     pub const fn set_flags(self, flags: Flags) -> Self {
         Self(self.as_u64() | flags.bits())
     }
-
+    #[inline]
+    #[must_use]
     pub const fn get_flags(self) -> Flags {
         Flags::from_bits_truncate(self.as_u64())
     }
@@ -156,51 +160,62 @@ impl<L> core::fmt::Debug for PageEntry<L> {
 
 impl<L> PageEntry<L> {
     #[inline]
+    #[must_use]
     pub const fn address(&self) -> PhysicalAddr {
         PhysicalAddr::new(self.raw.0 & 0x000F_FFFF_FFFF_F000)
     }
 
     #[inline]
+    #[must_use]
     pub const fn raw(&self) -> &RawPageEntry {
         &self.raw
     }
 
     #[inline]
-    pub fn clear(&mut self) {
-        self.raw = RawPageEntry::zero();
-    }
-
-    #[inline]
+    #[must_use]
     pub const fn get_flags(&self) -> Flags {
         self.raw.get_flags()
     }
 
     #[inline]
+    #[must_use]
     pub const fn is_huge(&self) -> bool {
         self.raw.get_flags().contains(Flags::HUGE)
     }
 
     #[inline]
+    #[must_use]
     pub const fn is_present(&self) -> bool {
         self.raw.get_flags().contains(Flags::PRESENT)
     }
 
     #[inline]
+    #[must_use]
     pub const fn get_mpk(&self) -> u64 {
         self.raw.get_mpk()
     }
 
     #[inline]
+    #[must_use]
     pub const fn get_user_bits(&self) -> u64 {
         self.raw.get_user_bits()
     }
 
+    /// # Safety
+    ///
+    /// The entry must not be in use
     #[inline]
-    pub fn set_flags(self: Pin<&mut Self>, flags: Flags) {
-        unsafe {
-            let this = self.get_unchecked_mut();
-            this.raw = this.raw.set_flags(flags);
-        }
+    pub unsafe fn clear(self: Pin<&mut Self>) {
+        self.get_unchecked_mut().raw = RawPageEntry::zero();
+    }
+
+    /// # Safety
+    ///
+    /// The flags must be valid for the current entry
+    #[inline]
+    pub unsafe fn set_flags(self: Pin<&mut Self>, flags: Flags) {
+        let this = self.get_unchecked_mut();
+        this.raw = this.raw.set_flags(flags);
     }
 
     #[inline]
@@ -221,11 +236,18 @@ impl<L> PageEntry<L> {
 }
 
 impl PageEntry<Level1> {
+    /// # Safety
+    ///
+    /// The address must a valid page
+    #[inline]
     pub unsafe fn set_frame(self: Pin<&mut Self>, addr: PhysicalFrame<Page4Kb>) {
         let this = self.get_unchecked_mut();
         this.raw = this.raw.set_address(addr.ptr());
     }
 
+    /// # Errors
+    ///
+    /// Fails if the entry is not marked present
     pub fn frame(self: Pin<&Self>) -> Result<PhysicalFrame<Page4Kb>, FrameError> {
         if !self.is_present() {
             Err(FrameError::EntryMissing)
@@ -242,6 +264,10 @@ pub enum MappedLevel2Page {
     Page2Mb(PhysicalFrame<Page2Mb>),
 }
 impl PageEntry<Level2> {
+    /// # Safety
+    ///
+    /// The address must a valid page
+    #[inline]
     pub unsafe fn set_frame<const N: u64>(self: Pin<&mut Self>, addr: PhysicalFrame<N>)
     where
         PageCheck<N>: NotGiantPageSize, // 4Kb or 2Mb
@@ -250,6 +276,9 @@ impl PageEntry<Level2> {
         this.raw = this.raw.set_address(addr.ptr());
     }
 
+    /// # Errors
+    ///
+    /// Fails if the entry is not marked present
     pub fn frame(self: Pin<&Self>) -> Result<MappedLevel2Page, FrameError> {
         if !self.is_present() {
             Err(FrameError::EntryMissing)
@@ -270,6 +299,10 @@ pub enum MappedLevel3Page {
     Page1Gb(PhysicalFrame<Page1Gb>),
 }
 impl PageEntry<Level3> {
+    /// # Safety
+    ///
+    /// The address must a valid page
+    #[inline]
     pub unsafe fn set_frame<const N: u64>(self: Pin<&mut Self>, addr: PhysicalFrame<N>)
     where
         PageCheck<N>: NotHugePageSize, // 4Kb or 1Gb
@@ -278,6 +311,9 @@ impl PageEntry<Level3> {
         this.raw = this.raw.set_address(addr.ptr());
     }
 
+    /// # Errors
+    ///
+    /// Fails if the entry is not marked present
     pub fn frame(self: Pin<&Self>) -> Result<MappedLevel3Page, FrameError> {
         if !self.is_present() {
             Err(FrameError::EntryMissing)
@@ -294,11 +330,18 @@ impl PageEntry<Level3> {
 }
 
 impl PageEntry<Level4> {
+    /// # Safety
+    ///
+    /// The address must a valid page
+    #[inline]
     pub unsafe fn set_frame(self: Pin<&mut Self>, addr: PhysicalFrame<Page4Kb>) {
         let this = self.get_unchecked_mut();
         this.raw = this.raw.set_address(addr.ptr());
     }
 
+    /// # Errors
+    ///
+    /// Fails if the entry is not marked present
     pub fn frame(self: Pin<&Self>) -> Result<PhysicalFrame<Page4Kb>, FrameError> {
         if !self.is_present() {
             Err(FrameError::EntryMissing)
@@ -314,6 +357,8 @@ impl MappedLevel2Page {
     /// Returns `true` if the mapped level2 page is [`Page1Gb`].
     ///
     /// [`Page1Gb`]: MappedLevel2Page::Page1Gb
+    #[inline]
+    #[must_use]
     pub const fn is_huge(&self) -> bool {
         matches!(self, Self::Page2Mb(..))
     }
@@ -323,6 +368,8 @@ impl MappedLevel3Page {
     /// Returns `true` if the mapped level3 page is [`Page2Mb`].
     ///
     /// [`Page2Mb`]: MappedLevel3Page::Page2Mb
+    #[inline]
+    #[must_use]
     pub const fn is_huge(&self) -> bool {
         matches!(self, Self::Page1Gb(..))
     }

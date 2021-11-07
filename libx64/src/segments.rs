@@ -62,6 +62,8 @@ pub fn ltr(sel: SegmentSelector) {
 }
 
 impl TaskStateSegment {
+    #[inline]
+    #[must_use]
     pub const fn zero() -> Self {
         Self {
             _reserved1: 0,
@@ -86,6 +88,8 @@ impl TaskStateSegment {
 /// | FS               | References optional data-segment descriptor entry |
 /// | GS               | References optional data-segment descriptor entry |
 
+#[inline]
+#[must_use]
 pub fn es() -> u16 {
     unsafe {
         let segment: u16;
@@ -93,6 +97,9 @@ pub fn es() -> u16 {
         segment
     }
 }
+
+#[inline]
+#[must_use]
 pub fn cs() -> u16 {
     unsafe {
         let segment: u16;
@@ -116,6 +123,8 @@ pub fn set_cs(ss: SegmentSelector) {
     }
 }
 
+#[inline]
+#[must_use]
 pub fn ss() -> u16 {
     unsafe {
         let segment: u16;
@@ -123,6 +132,9 @@ pub fn ss() -> u16 {
         segment
     }
 }
+
+#[inline]
+#[must_use]
 pub fn ds() -> u16 {
     unsafe {
         let segment: u16;
@@ -130,6 +142,9 @@ pub fn ds() -> u16 {
         segment
     }
 }
+
+#[inline]
+#[must_use]
 pub fn fs() -> u16 {
     unsafe {
         let segment: u16;
@@ -137,6 +152,9 @@ pub fn fs() -> u16 {
         segment
     }
 }
+
+#[inline]
+#[must_use]
 pub fn gs() -> u16 {
     unsafe {
         let segment: u16;

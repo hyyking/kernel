@@ -12,6 +12,8 @@ pub struct CodeSegmentDescriptor {
 }
 
 impl CodeSegmentDescriptor {
+    #[inline]
+    #[must_use]
     pub const fn empty() -> Self {
         Self {
             limit_low: 0,
@@ -23,6 +25,8 @@ impl CodeSegmentDescriptor {
         }
     }
 
+    #[inline]
+    #[must_use]
     pub const fn kernel_x64() -> Self {
         let mut this = Self::empty();
         this.limit_low = u16::MAX;

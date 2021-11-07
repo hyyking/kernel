@@ -9,7 +9,7 @@ use libx64::{
     },
 };
 
-pub struct OffsetWalker<const N: u64>
+pub(crate) struct OffsetWalker<const N: u64>
 where
     PageCheck<N>: PageSize,
 {
@@ -20,12 +20,12 @@ impl<const N: u64> OffsetWalker<N>
 where
     PageCheck<N>: PageSize,
 {
-    pub const fn new(offset: VirtualAddr) -> Self {
+    pub(crate) const fn new(offset: VirtualAddr) -> Self {
         debug_assert!(!offset.is_null());
         Self { offset }
     }
 
-    pub fn translate(&self, frame: PhysicalFrame<N>) -> NonNull<()> {
+    pub(crate) fn translate(&self, frame: PhysicalFrame<N>) -> NonNull<()> {
         (self.offset + frame.ptr().as_u64())
             .ptr()
             .expect("null frame pointer and offset")

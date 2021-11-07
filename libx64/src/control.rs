@@ -5,6 +5,8 @@ use crate::{
 
 use bitfield::bitfield;
 
+#[inline]
+#[must_use]
 pub fn cr2() -> VirtualAddr {
     unsafe {
         let value: u64;
@@ -22,11 +24,15 @@ bitfield! {
 }
 
 impl CR3 {
+    #[inline]
+    #[must_use]
     pub const fn frame(&self) -> PhysicalFrame<Page4Kb> {
         PhysicalFrame::containing(PhysicalAddr::new(self.0 & 0x000F_FFFF_FFFF_F000))
     }
 }
 
+#[inline]
+#[must_use]
 pub fn cr3() -> CR3 {
     unsafe {
         let value: u64;

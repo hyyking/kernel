@@ -1,5 +1,6 @@
 #![no_std]
 #![feature(allocator_api)]
+#![allow(clippy::cast_possible_truncation)]
 
 extern crate alloc;
 

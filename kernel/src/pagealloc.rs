@@ -5,7 +5,7 @@ use libx64::paging::{
 
 use bootloader::bootinfo::{MemoryMap, MemoryRegionType};
 
-/// A FrameAllocator that returns usable frames from the bootloader's memory map.
+/// A [`FrameAllocator`] that returns usable frames from the bootloader's memory map.
 #[derive(Debug)]
 pub struct BootInfoFrameAllocator {
     memory_map: &'static MemoryMap,

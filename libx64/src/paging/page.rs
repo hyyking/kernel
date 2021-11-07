@@ -13,6 +13,9 @@ where
     A: FrameAllocator<Page4Kb> + FrameAllocator<N>,
     PageCheck<N>: PageSize,
 {
+    /// # Errors
+    ///
+    /// - No more available frames
     fn map(
         &mut self,
         page: Page<N>,
@@ -30,7 +33,7 @@ where
     addr: VirtualAddr,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct PageRange<const N: u64>
 where
     PageCheck<N>: PageSize,
@@ -60,10 +63,14 @@ impl<const N: u64> PageRange<N>
 where
     PageCheck<N>: PageSize,
 {
+    #[inline]
+    #[must_use]
     pub const fn new(start: VirtualAddr, end: VirtualAddr) -> Self {
         Self { start, end, at: 0 }
     }
 
+    #[inline]
+    #[must_use]
     pub const fn with_size(start: VirtualAddr, size: u64) -> Self {
         debug_assert!(size % N == 0, "size must be a multiple of the page size");
         let end = VirtualAddr::new(start.as_u64() + size);
@@ -75,12 +82,16 @@ impl<const N: u64> Page<N>
 where
     PageCheck<N>: PageSize,
 {
+    #[inline]
+    #[must_use]
     pub const fn containing(addr: VirtualAddr) -> Self {
         Self {
             addr: addr.align_down(N),
         }
     }
 
+    #[inline]
+    #[must_use]
     pub const fn ptr(self) -> VirtualAddr {
         self.addr
     }

@@ -20,7 +20,7 @@ pub const Page4Kb: u64 = 4 * Kb;
 pub const Page2Mb: u64 = 2 * Mb;
 
 #[allow(non_upper_case_globals)]
-pub const Page1Gb: u64 = 1 * Gb;
+pub const Page1Gb: u64 = Gb;
 
 pub trait PageSize {}
 pub trait NotHugePageSize: PageSize {}
@@ -96,5 +96,5 @@ pub fn invlpg(addr: VirtualAddr) {
 #[inline]
 pub fn invalidate_tlb() {
     let cr3 = crate::control::cr3();
-    crate::control::set_cr3(cr3)
+    crate::control::set_cr3(cr3);
 }

@@ -14,6 +14,8 @@ pub struct CallGateDescriptor {
 }
 
 impl CallGateDescriptor {
+    #[inline]
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             offset_low: 0,
