@@ -187,3 +187,35 @@ impl core::ops::Sub<u64> for PhysicalAddr {
         Self(self.0 - rhs)
     }
 }
+
+impl core::ops::Add<usize> for VirtualAddr {
+    type Output = VirtualAddr;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        Self(self.0 + rhs as u64)
+    }
+}
+
+impl core::ops::Sub<usize> for VirtualAddr {
+    type Output = VirtualAddr;
+
+    fn sub(self, rhs: usize) -> Self::Output {
+        Self(self.0 - rhs as u64)
+    }
+}
+
+impl core::ops::Add<usize> for PhysicalAddr {
+    type Output = PhysicalAddr;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        Self(self.0 + rhs as u64)
+    }
+}
+
+impl core::ops::Sub<usize> for PhysicalAddr {
+    type Output = PhysicalAddr;
+
+    fn sub(self, rhs: usize) -> Self::Output {
+        Self(self.0 - rhs as u64)
+    }
+}
