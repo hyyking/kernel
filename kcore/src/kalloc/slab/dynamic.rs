@@ -65,19 +65,10 @@ impl<const MIN: usize> Bucket<MIN> {
 }
 
 #[repr(C)]
-pub struct BuddyPage<const MIN: usize> {
+pub struct Slab<const MIN: usize> {
     bins: [Option<Bucket<MIN>>; 32],
     start: VirtualAddr,
     used_mask: u32,
-}
-
-impl<const M: usize> core::fmt::Debug for BuddyPage<M> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("BuddyPage")
-            .field("bins", &self.bins)
-            .field("mask", &format_args!("{:#034b}", &self.used_mask))
-            .finish()
-    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -86,7 +77,7 @@ pub enum Error {
     InvalidPageRange { expected: u64, got: u64 },
 }
 
-impl<const MIN: usize> BuddyPage<MIN> {
+impl<const MIN: usize> Slab<MIN> {
     pub const fn new(page: PageRange<Page4Kb>) -> Result<Self, Error> {
         if !MIN.is_power_of_two() {
             return Err(Error::InvalidBucketSize);
@@ -211,7 +202,7 @@ impl<const MIN: usize> BuddyPage<MIN> {
     }
 }
 
-unsafe impl<const MIN: usize> Allocator for crate::sync::SpinMutex<BuddyPage<MIN>> {
+unsafe impl<const MIN: usize> Allocator for crate::sync::SpinMutex<Slab<MIN>> {
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
         // Out of memory
         let size = core::cmp::max(layout.size().next_power_of_two() * 8, MIN as usize);
@@ -260,7 +251,7 @@ unsafe impl<const MIN: usize> Allocator for crate::sync::SpinMutex<BuddyPage<MIN
         //  1. It is in bin range (< 32)
         //  2. Buckets have the same size (bin.size() == buddy.size())
         //  3. Buddy is not used
-        let mut buddy_range = BuddyPage::<MIN>::buddy_of(range);
+        let mut buddy_range = Slab::<MIN>::buddy_of(range);
         while buddy_range.start < 32
             && this.bins[index].as_ref().map(Bucket::size)
                 == this.bins[buddy_range.start].as_ref().map(Bucket::size)
@@ -275,7 +266,7 @@ unsafe impl<const MIN: usize> Allocator for crate::sync::SpinMutex<BuddyPage<MIN
 
             this.bins[index] = Some(new);
 
-            buddy_range = BuddyPage::<MIN>::buddy_of(new.range());
+            buddy_range = Slab::<MIN>::buddy_of(new.range());
         }
     }
 
@@ -312,7 +303,7 @@ unsafe impl<const MIN: usize> Allocator for crate::sync::SpinMutex<BuddyPage<MIN
         };
         let index = range.start;
 
-        let buddy_range = BuddyPage::<MIN>::buddy_of(range);
+        let buddy_range = Slab::<MIN>::buddy_of(range);
         let buddy_index = buddy_range.start;
 
         // Fast path:
@@ -328,7 +319,7 @@ unsafe impl<const MIN: usize> Allocator for crate::sync::SpinMutex<BuddyPage<MIN
         //             |
         //            Bin
         //
-        if BuddyPage::<MIN>::is_right(buddy_range) && !this.is_used(buddy_index) {
+        if Slab::<MIN>::is_right(buddy_range) && !this.is_used(buddy_index) {
             let buddy = this.bins[buddy_index].take().expect("buddy should exist");
             let bin = this.bins[index].take().expect("bin should exist");
             let new = bin.merge(buddy);
@@ -416,8 +407,18 @@ unsafe impl<const MIN: usize> Allocator for crate::sync::SpinMutex<BuddyPage<MIN
     }
 }
 
+#[inline]
 fn slot_range(size: usize) -> core::iter::StepBy<Range<usize>> {
     (0..32).step_by(size / 128)
+}
+
+impl<const M: usize> core::fmt::Debug for Slab<M> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Slab")
+            .field("bins", &self.bins)
+            .field("mask", &format_args!("{:#034b}", &self.used_mask))
+            .finish()
+    }
 }
 
 #[cfg(test)]
@@ -427,7 +428,7 @@ mod tests {
     #[test]
     fn allocate_all_slabs() {
         let buddy = crate::sync::mutex::SpinMutex::new(
-            BuddyPage::<128>::new(PageRange::with_size(
+            Slab::<128>::new(PageRange::with_size(
                 VirtualAddr::new(0x0000_dead_beaf_0000),
                 Page4Kb,
             ))
@@ -484,7 +485,7 @@ mod tests {
     #[test]
     fn allocate_all_big() {
         let buddy = crate::sync::mutex::SpinMutex::new(
-            BuddyPage::<128>::new(PageRange::with_size(
+            Slab::<128>::new(PageRange::with_size(
                 VirtualAddr::new(0x0000_dead_beaf_0000),
                 Page4Kb,
             ))
@@ -500,7 +501,7 @@ mod tests {
     fn shrink_once() {
         // TODO: expand tests
         let buddy = crate::sync::mutex::SpinMutex::new(
-            BuddyPage::<128>::new(PageRange::with_size(
+            Slab::<128>::new(PageRange::with_size(
                 VirtualAddr::new(0x0000_dead_beaf_0000),
                 Page4Kb,
             ))
@@ -539,7 +540,7 @@ mod tests {
     #[test]
     fn grow_big_fast() {
         let buddy = crate::sync::mutex::SpinMutex::new(
-            BuddyPage::<128>::new(PageRange::with_size(
+            Slab::<128>::new(PageRange::with_size(
                 VirtualAddr::new(0x0000_dead_beaf_0000),
                 Page4Kb,
             ))
@@ -583,7 +584,7 @@ mod tests {
     #[test]
     fn allocate_mixed() {
         let buddy = crate::sync::mutex::SpinMutex::new(
-            BuddyPage::<128>::new(PageRange::with_size(
+            Slab::<128>::new(PageRange::with_size(
                 VirtualAddr::new(0x0000_dead_beaf_0000),
                 Page4Kb,
             ))
@@ -646,7 +647,7 @@ mod tests {
     #[test]
     fn deallocate_all_slabs() {
         let buddy = crate::sync::mutex::SpinMutex::new(
-            BuddyPage::<128>::new(PageRange::with_size(
+            Slab::<128>::new(PageRange::with_size(
                 VirtualAddr::new(0x0000_dead_beaf_0000),
                 Page4Kb,
             ))
@@ -704,19 +705,25 @@ mod tests {
 
     #[test]
     fn buddy_of_test() {
-        assert_eq!(BuddyPage::<128>::buddy_of(0..1), 1..2);
-        assert_eq!(BuddyPage::<128>::buddy_of(1..2), 0..1);
+        assert_eq!(Slab::<128>::buddy_of(0..1), 1..2);
+        assert_eq!(Slab::<128>::buddy_of(1..2), 0..1);
 
-        assert_eq!(BuddyPage::<128>::buddy_of(0..2), 2..4);
-        assert_eq!(BuddyPage::<128>::buddy_of(2..4), 0..2);
+        assert_eq!(Slab::<128>::buddy_of(2..3), 3..4);
+        assert_eq!(Slab::<128>::buddy_of(3..4), 2..3);
 
-        assert_eq!(BuddyPage::<128>::buddy_of(0..4), 4..8);
-        assert_eq!(BuddyPage::<128>::buddy_of(4..8), 0..4);
+        assert_eq!(Slab::<128>::buddy_of(4..5), 5..6);
+        assert_eq!(Slab::<128>::buddy_of(5..6), 4..5);
 
-        assert_eq!(BuddyPage::<128>::buddy_of(0..8), 8..16);
-        assert_eq!(BuddyPage::<128>::buddy_of(8..16), 0..8);
+        assert_eq!(Slab::<128>::buddy_of(0..2), 2..4);
+        assert_eq!(Slab::<128>::buddy_of(2..4), 0..2);
 
-        assert_eq!(BuddyPage::<128>::buddy_of(0..16), 16..32);
-        assert_eq!(BuddyPage::<128>::buddy_of(16..32), 0..16);
+        assert_eq!(Slab::<128>::buddy_of(0..4), 4..8);
+        assert_eq!(Slab::<128>::buddy_of(4..8), 0..4);
+
+        assert_eq!(Slab::<128>::buddy_of(0..8), 8..16);
+        assert_eq!(Slab::<128>::buddy_of(8..16), 0..8);
+
+        assert_eq!(Slab::<128>::buddy_of(0..16), 16..32);
+        assert_eq!(Slab::<128>::buddy_of(16..32), 0..16);
     }
 }
