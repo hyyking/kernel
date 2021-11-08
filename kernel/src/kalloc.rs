@@ -1,6 +1,6 @@
 use alloc::alloc::Layout;
 
-use kcore::{kalloc::SlabPage, resource::Mapped, sync::SpinMutex};
+use kcore::{kalloc::slab::fixed::SlabPage, resource::Mapped, sync::SpinMutex};
 use libx64::{
     address::VirtualAddr,
     paging::{

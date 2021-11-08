@@ -71,6 +71,30 @@ where
 
     #[inline]
     #[must_use]
+    pub const fn start(&self) -> VirtualAddr {
+        self.start
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn end(&self) -> VirtualAddr {
+        self.start
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        ((self.end.as_u64() - self.start.as_u64()) / N) as usize
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    #[inline]
+    #[must_use]
     pub const fn with_size(start: VirtualAddr, size: u64) -> Self {
         debug_assert!(size % N == 0, "size must be a multiple of the page size");
         let end = VirtualAddr::new(start.as_u64() + size);
@@ -94,6 +118,10 @@ where
     #[must_use]
     pub const fn ptr(self) -> VirtualAddr {
         self.addr
+    }
+
+    pub const fn end_ptr(self) -> VirtualAddr {
+        VirtualAddr::new(self.addr.as_u64() + N)
     }
 }
 
