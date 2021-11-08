@@ -12,11 +12,16 @@ use libx64::{
     paging::{page::PageRange, Page4Kb},
 };
 
+use crate::kalloc::slab::{SlabCheck, SlabSize};
+
 #[derive(Clone, Copy, Eq, PartialEq)]
 #[repr(transparent)]
 struct Bucket<const MIN: usize>(NonZeroU16);
 
-impl<const MIN: usize> core::fmt::Debug for Bucket<MIN> {
+impl<const MIN: usize> core::fmt::Debug for Bucket<MIN>
+where
+    SlabCheck<MIN>: SlabSize,
+{
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Bucket")
             .field("size", &self.size())
@@ -25,7 +30,10 @@ impl<const MIN: usize> core::fmt::Debug for Bucket<MIN> {
     }
 }
 
-impl<const MIN: usize> Bucket<MIN> {
+impl<const MIN: usize> Bucket<MIN>
+where
+    SlabCheck<MIN>: SlabSize,
+{
     const fn new(start: u16, end: u16) -> Self {
         unsafe { Self(NonZeroU16::new_unchecked(end << 8 | start)) }
     }
@@ -77,7 +85,10 @@ pub enum Error {
     InvalidPageRange { expected: u64, got: u64 },
 }
 
-impl<const MIN: usize> Slab<MIN> {
+impl<const MIN: usize> Slab<MIN>
+where
+    SlabCheck<MIN>: SlabSize,
+{
     pub const fn new(page: PageRange<Page4Kb>) -> Result<Self, Error> {
         if !MIN.is_power_of_two() {
             return Err(Error::InvalidBucketSize);
@@ -202,7 +213,10 @@ impl<const MIN: usize> Slab<MIN> {
     }
 }
 
-unsafe impl<const MIN: usize> Allocator for crate::sync::SpinMutex<Slab<MIN>> {
+unsafe impl<const MIN: usize> Allocator for crate::sync::SpinMutex<Slab<MIN>>
+where
+    SlabCheck<MIN>: SlabSize,
+{
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
         // Out of memory
         let size = core::cmp::max(layout.size().next_power_of_two() * 8, MIN as usize);
@@ -412,7 +426,10 @@ fn slot_range(size: usize) -> core::iter::StepBy<Range<usize>> {
     (0..32).step_by(size / 128)
 }
 
-impl<const M: usize> core::fmt::Debug for Slab<M> {
+impl<const M: usize> core::fmt::Debug for Slab<M>
+where
+    SlabCheck<M>: SlabSize,
+{
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Slab")
             .field("bins", &self.bins)
@@ -427,7 +444,7 @@ mod tests {
 
     #[test]
     fn allocate_all_slabs() {
-        let buddy = crate::sync::mutex::SpinMutex::new(
+        let buddy = crate::sync::SpinMutex::new(
             Slab::<128>::new(PageRange::with_size(
                 VirtualAddr::new(0x0000_dead_beaf_0000),
                 Page4Kb,
@@ -484,7 +501,7 @@ mod tests {
 
     #[test]
     fn allocate_all_big() {
-        let buddy = crate::sync::mutex::SpinMutex::new(
+        let buddy = crate::sync::SpinMutex::new(
             Slab::<128>::new(PageRange::with_size(
                 VirtualAddr::new(0x0000_dead_beaf_0000),
                 Page4Kb,
@@ -500,7 +517,7 @@ mod tests {
     #[test]
     fn shrink_once() {
         // TODO: expand tests
-        let buddy = crate::sync::mutex::SpinMutex::new(
+        let buddy = crate::sync::SpinMutex::new(
             Slab::<128>::new(PageRange::with_size(
                 VirtualAddr::new(0x0000_dead_beaf_0000),
                 Page4Kb,
@@ -539,7 +556,7 @@ mod tests {
 
     #[test]
     fn grow_big_fast() {
-        let buddy = crate::sync::mutex::SpinMutex::new(
+        let buddy = crate::sync::SpinMutex::new(
             Slab::<128>::new(PageRange::with_size(
                 VirtualAddr::new(0x0000_dead_beaf_0000),
                 Page4Kb,
@@ -583,7 +600,7 @@ mod tests {
 
     #[test]
     fn allocate_mixed() {
-        let buddy = crate::sync::mutex::SpinMutex::new(
+        let buddy = crate::sync::SpinMutex::new(
             Slab::<128>::new(PageRange::with_size(
                 VirtualAddr::new(0x0000_dead_beaf_0000),
                 Page4Kb,
@@ -646,7 +663,7 @@ mod tests {
 
     #[test]
     fn deallocate_all_slabs() {
-        let buddy = crate::sync::mutex::SpinMutex::new(
+        let buddy = crate::sync::SpinMutex::new(
             Slab::<128>::new(PageRange::with_size(
                 VirtualAddr::new(0x0000_dead_beaf_0000),
                 Page4Kb,

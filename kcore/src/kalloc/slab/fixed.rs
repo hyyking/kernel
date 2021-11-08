@@ -3,15 +3,9 @@ use core::ptr::NonNull;
 
 use libx64::paging::{page::Page, Page4Kb};
 
-pub trait SlabSize {}
+use crate::kalloc::slab::{SlabCheck, SlabSize};
 
-pub struct SlabCheck<const N: u64>;
-impl SlabSize for SlabCheck<128> {}
-impl SlabSize for SlabCheck<256> {}
-impl SlabSize for SlabCheck<512> {}
-impl SlabSize for SlabCheck<1024> {}
-
-pub struct SlabPage<const N: u64>
+pub struct SlabPage<const N: usize>
 where
     SlabCheck<N>: SlabSize,
 {
@@ -20,7 +14,7 @@ where
     len: u32,
 }
 
-impl<const N: u64> SlabPage<N>
+impl<const N: usize> SlabPage<N>
 where
     SlabCheck<N>: SlabSize,
 {
@@ -39,7 +33,7 @@ where
     }
 
     pub const fn capacity(&self) -> usize {
-        (Page4Kb / N) as usize
+        Page4Kb as usize / N
     }
 
     fn allocate(&mut self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
@@ -90,7 +84,7 @@ where
     }
 }
 
-impl<const N: u64> core::fmt::Debug for SlabPage<N>
+impl<const N: usize> core::fmt::Debug for SlabPage<N>
 where
     SlabCheck<N>: SlabSize,
 {
@@ -104,7 +98,7 @@ where
     }
 }
 
-unsafe impl<const N: u64> Allocator for crate::sync::SpinMutex<SlabPage<N>>
+unsafe impl<const N: usize> Allocator for crate::sync::SpinMutex<SlabPage<N>>
 where
     SlabCheck<N>: SlabSize,
 {
