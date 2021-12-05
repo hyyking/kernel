@@ -223,11 +223,12 @@ where
 
         let mut this = self.lock();
         // fast path
+        //
         if !this.have_buckets_for(size) {
             return Err(AllocError);
         }
 
-        match slot_range(size).find(|&i| this.available_for(i, layout)) {
+        match slot_range::<MIN>(size).find(|&i| this.available_for(i, layout)) {
             Some(i) => {
                 let mut bin = this.bins[i].ok_or(AllocError)?;
 
@@ -237,7 +238,6 @@ where
                 }
 
                 this.mark_used(i);
-
                 Ok(unsafe {
                     NonNull::new_unchecked(core::slice::from_raw_parts_mut(
                         this.addr_for(bin.range()),
@@ -422,8 +422,8 @@ where
 }
 
 #[inline]
-fn slot_range(size: usize) -> core::iter::StepBy<Range<usize>> {
-    (0..32).step_by(size / 128)
+fn slot_range<const MIN: usize>(size: usize) -> core::iter::StepBy<Range<usize>> {
+    (0..32).step_by(size / MIN)
 }
 
 impl<const M: usize> core::fmt::Debug for Slab<M>

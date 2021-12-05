@@ -42,6 +42,7 @@ name = "kcore"
 version = "0.1.0"
 dependencies = [
  "libx64",
+ "log",
 ]
 
 [[package]]

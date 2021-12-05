@@ -1,6 +1,7 @@
 #![feature(custom_test_frameworks)]
 #![feature(asm)]
 #![feature(alloc_error_handler)]
+#![feature(allocator_api)]
 #![feature(abi_x86_interrupt)]
 #![test_runner(crate::infra::tests::test_runner)]
 #![reexport_test_harness_main = "test_main"]
@@ -21,11 +22,12 @@ use core::panic::PanicInfo;
 
 use libx64::address::VirtualAddr;
 
+use crate::mem::{context::MemoryLayout, pagealloc::BootInfoFrameAllocator};
+
 #[macro_use]
 mod infra;
 mod init;
-pub mod kalloc;
-mod pagealloc;
+pub mod mem;
 
 bootloader::entry_point!(kmain);
 
@@ -52,9 +54,12 @@ pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
             .try_translate_addr(VirtualAddr::new(0xb8000))
             .unwrap());
 
-        let mut alloc = pagealloc::BootInfoFrameAllocator::init(&bi.memory_map);
+        let layout = MemoryLayout::init(&bi.memory_map).expect("memory layout");
+        dbg!(layout);
 
-        crate::kalloc::GLOBAL_ALLOC
+        let mut alloc = BootInfoFrameAllocator::init(&bi.memory_map);
+
+        mem::galloc::GLOBAL_ALLOC
             .map(&mut walker, &mut alloc)
             .expect("unable to map");
 
@@ -62,11 +67,11 @@ pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
         dbg!(test);
         let test2 = alloc::boxed::Box::new(2_u64);
         let test = alloc::boxed::Box::new(3_u64);
-        debug!("{:#?}", &*crate::kalloc::GLOBAL_ALLOC.resource().lock());
+        debug!("{:#?}", &*mem::galloc::GLOBAL_ALLOC.resource().lock());
         drop(test2);
 
         debug!("{}", test);
-        debug!("{:#?}", &*crate::kalloc::GLOBAL_ALLOC.resource().lock());
+        debug!("{:#?}", &*mem::galloc::GLOBAL_ALLOC.resource().lock());
     }
 
     #[cfg(test)]

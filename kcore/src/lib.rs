@@ -7,6 +7,9 @@ extern crate std;
 
 extern crate alloc;
 
+#[macro_use]
+extern crate log;
+
 pub mod either;
 pub mod kalloc;
 pub mod ptr;

@@ -67,6 +67,75 @@ where
     }
 }
 
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct FrameRange<const N: u64>
+where
+    PageCheck<N>: PageSize,
+{
+    start: PhysicalAddr,
+    end: PhysicalAddr,
+    at: u64,
+}
+
+impl<const N: u64> Iterator for FrameRange<N>
+where
+    PageCheck<N>: PageSize,
+{
+    type Item = PhysicalFrame<N>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let addr = self.start.align_down(N) + (self.at * N);
+        if addr.as_u64() > (self.end.as_u64() - 1) {
+            return None;
+        }
+        self.at += 1;
+        Some(PhysicalFrame::containing(addr))
+    }
+}
+
+impl<const N: u64> FrameRange<N>
+where
+    PageCheck<N>: PageSize,
+{
+    #[inline]
+    #[must_use]
+    pub const fn new(start: PhysicalAddr, end: PhysicalAddr) -> Self {
+        Self { start, end, at: 0 }
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn start(&self) -> PhysicalAddr {
+        self.start
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn end(&self) -> PhysicalAddr {
+        self.start
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        ((self.end.as_u64() - self.start.as_u64()) / N) as usize
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn with_size(start: PhysicalAddr, size: u64) -> Self {
+        debug_assert!(size % N == 0, "size must be a multiple of the page size");
+        let end = PhysicalAddr::new(start.as_u64() + size);
+        Self { start, end, at: 0 }
+    }
+}
+
 impl<const N: u64> core::fmt::Debug for PhysicalFrame<N>
 where
     PageCheck<N>: PageSize,

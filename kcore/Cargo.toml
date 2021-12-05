@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 libx64 = { path="../libx64" }
+log = {version = "0.4"}
