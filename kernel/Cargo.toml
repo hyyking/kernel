@@ -17,6 +17,7 @@ kcore = {path = "../kcore"}
 
 # ----- DRIVERS -----
 page_mapper = {path = "../drivers/page_mapper"}
+scheduler = {path = "../drivers/scheduler"}
 pic = {path = "../drivers/pic"}
 vga = {path = "../drivers/vga"}
 serialuart16550 = {path = "../drivers/serialuart16550"}
@@ -24,10 +25,8 @@ serialuart16550 = {path = "../drivers/serialuart16550"}
 # ----- UTILS -----
 bitflags = {version="1", default-features=false}
 log = {version="0.4", default-features=false, features=["max_level_trace"]}
-
 interrupt_list = {path = "../utils/interrupt_list", features=["libx64"]}
 qemu_logger = {path = "../utils/qemu_logger"}
-
 
 [package.metadata.bootimage]
 run-args = ["-serial", "stdio"]

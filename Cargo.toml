@@ -9,6 +9,7 @@ members = [
     "utils/qemu_logger",
     
     "drivers/page_mapper",
+    "drivers/scheduler",
     "drivers/pic",
     "drivers/vga",
     "drivers/serialuart16550",

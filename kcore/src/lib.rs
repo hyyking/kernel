@@ -13,6 +13,11 @@ extern crate log;
 pub mod either;
 pub mod kalloc;
 pub mod ptr;
+
+pub mod queue {
+    pub use crossbeam_queue::*;
+}
+
 pub mod resource;
 pub mod sync;
 pub mod tables;

@@ -24,6 +24,8 @@ use libx64::address::VirtualAddr;
 
 use crate::mem::{context::MemoryLayout, pagealloc::BootInfoFrameAllocator};
 
+use scheduler::{Scheduler, Task};
+
 #[macro_use]
 mod infra;
 mod init;
@@ -72,6 +74,14 @@ pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
 
         debug!("{}", test);
         debug!("{:#?}", &*mem::galloc::GLOBAL_ALLOC.resource().lock());
+
+        let mut scheduler = Scheduler::new();
+
+        scheduler.spawn(async {
+            kprintln!("{:?}", 42);
+        });
+
+        scheduler.run();
     }
 
     #[cfg(test)]

@@ -1,11 +1,9 @@
 [package]
-name = "kcore"
+name = "scheduler"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-libx64 = { path="../libx64" }
-log = {version = "0.4"}
-crossbeam-queue = {version = "0.3", default-features=false, features=["alloc"]}
+log = {version="0.4"}

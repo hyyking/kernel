@@ -28,6 +28,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
+name = "crossbeam-queue"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b10ddc024425c88c2ad148c1b0fd53f4c6d38db9697c9f1588381212fa657c9"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "crossbeam-utils"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d82cfc11ce7f2c3faef78d8a684447b40d503d9681acebed6cb728d45940c4db"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "interrupt_list"
 version = "0.1.0"
 dependencies = [
@@ -41,6 +60,7 @@ dependencies = [
 name = "kcore"
 version = "0.1.0"
 dependencies = [
+ "crossbeam-queue",
  "libx64",
  "log",
 ]
@@ -58,6 +78,7 @@ dependencies = [
  "page_mapper",
  "pic",
  "qemu_logger",
+ "scheduler",
  "serialuart16550",
  "vga",
 ]
@@ -126,6 +147,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "38bc8cc6a5f2e3655e0899c1b848643b2562f853f114bfec7be120678e3ace05"
 dependencies = [
  "proc-macro2",
+]
+
+[[package]]
+name = "scheduler"
+version = "0.1.0"
+dependencies = [
+ "log",
 ]
 
 [[package]]
