@@ -10,8 +10,14 @@ use libx64::{
 
 pub struct MemoryContext<M, A> {
     layout: MemoryLayout,
-    mapper: M,
-    alloc: A,
+    pub mapper: M,
+    pub alloc: A,
+}
+
+pub struct MemoryLayout {
+    memory_map: &'static MemoryMap,
+    pub low: FrameRange<Page4Kb>,
+    pub high: FrameRange<Page4Kb>,
 }
 
 impl<M, A> MemoryContext<M, A> {
@@ -22,13 +28,6 @@ impl<M, A> MemoryContext<M, A> {
             alloc,
         }
     }
-}
-
-#[derive(Debug)]
-pub struct MemoryLayout {
-    memory_map: &'static MemoryMap,
-    pub low: FrameRange<Page4Kb>,
-    pub high: FrameRange<Page4Kb>,
 }
 
 #[derive(Debug)]
@@ -60,5 +59,15 @@ impl MemoryLayout {
 
     pub fn memory_map(&self) -> *const MemoryMap {
         self.memory_map
+    }
+}
+
+impl core::fmt::Debug for MemoryLayout {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("MemoryLayout")
+            .field("memory_map", &"[ ... ]")
+            .field("low", &self.low)
+            .field("high", &self.high)
+            .finish()
     }
 }

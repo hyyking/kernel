@@ -18,6 +18,16 @@ pub mod queue {
     pub use crossbeam_queue::*;
 }
 
+pub mod futures {
+    pub mod task {
+        pub use futures_util::task::{waker, ArcWake, AtomicWaker};
+    }
+
+    pub mod stream {
+        pub use futures_util::stream::*;
+    }
+}
+
 pub mod resource;
 pub mod sync;
 pub mod tables;

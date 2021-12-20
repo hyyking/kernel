@@ -38,50 +38,35 @@ pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
 
     kprintln!("[OK] kernel loaded");
 
-    let pmo = VirtualAddr::new(bi.physical_memory_offset);
-
     init::kinit();
     libx64::sti();
 
     {
-        use page_mapper::OffsetMapper;
-
-        let mut walker = OffsetMapper::new(pmo);
-
-        dbg!(walker
-            .try_translate_addr(VirtualAddr::new(0x0020_1008))
-            .unwrap());
-        dbg!(walker.try_translate_addr(pmo).unwrap());
-        dbg!(walker
-            .try_translate_addr(VirtualAddr::new(0xb8000))
-            .unwrap());
+        let pmo = VirtualAddr::new(bi.physical_memory_offset);
 
         let layout = MemoryLayout::init(&bi.memory_map).expect("memory layout");
-        dbg!(layout);
+        let walker = page_mapper::OffsetMapper::new(pmo);
+        let alloc = BootInfoFrameAllocator::init(&bi.memory_map);
 
-        let mut alloc = BootInfoFrameAllocator::init(&bi.memory_map);
+        let mut context = crate::mem::context::MemoryContext::new(layout, walker, alloc);
 
         mem::galloc::GLOBAL_ALLOC
-            .map(&mut walker, &mut alloc)
-            .expect("unable to map");
+            .map(&mut context.mapper, &mut context.alloc)
+            .expect("unable to map the global allocator");
 
-        let test = vec![1_u128];
-        dbg!(test);
-        let test2 = alloc::boxed::Box::new(2_u64);
-        let test = alloc::boxed::Box::new(3_u64);
-        debug!("{:#?}", &*mem::galloc::GLOBAL_ALLOC.resource().lock());
-        drop(test2);
-
-        debug!("{}", test);
-        debug!("{:#?}", &*mem::galloc::GLOBAL_ALLOC.resource().lock());
-
-        let mut scheduler = Scheduler::new();
+        dbg!("HERE");
+        /*
+         * let mut scheduler = Scheduler::new();
 
         scheduler.spawn(async {
-            kprintln!("{:?}", 42);
-        });
+            use kcore::futures::stream::StreamExt;
 
+            while let Some(key) = (&mut *crate::init::KEYBOARD.lock()).next().await {
+                kprint!("{}", key)
+            }
+        });
         scheduler.run();
+        */
     }
 
     #[cfg(test)]

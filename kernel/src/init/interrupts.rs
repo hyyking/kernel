@@ -37,7 +37,7 @@ pub extern "x86-interrupt" fn page_fault(f: InterruptFrame, code: u64) {
 
 #[interrupt_list::interrupt_list(IntIdx)]
 pub mod user {
-    use super::InterruptFrame;
+    use super::{super::KEYBOARD, InterruptFrame};
     use kcore::{klazy, sync::SpinMutex};
     use pic::chained::Chained;
 
@@ -57,7 +57,7 @@ pub mod user {
         use libx64::port::RPort;
 
         let kb = RPort::<u8>::new(0x60);
-        let _scancode = unsafe { kb.read() };
+        unsafe { KEYBOARD.lock().add_value(dbg!(kb.read())) };
 
         PICS.lock().interupt_fn(IntIdx::Keyboard).expect("keyboard");
     }

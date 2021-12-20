@@ -23,19 +23,19 @@ impl SchedulerWaker {
         unsafe { Waker::from_raw(RawWaker::new(core::ptr::null(), Self::VTABLE)) }
     }
 
-    unsafe fn clone(ptr: *const ()) -> RawWaker {
+    unsafe fn clone(_ptr: *const ()) -> RawWaker {
         todo!()
     }
 
-    unsafe fn wake(ptr: *const ()) {
+    unsafe fn wake(_ptr: *const ()) {
         todo!()
     }
 
-    unsafe fn wake_by_ref(ptr: *const ()) {
+    unsafe fn wake_by_ref(_ptr: *const ()) {
         todo!()
     }
 
-    unsafe fn drop(ptr: *const ()) {}
+    unsafe fn drop(_ptr: *const ()) {}
 }
 
 pub struct Task {

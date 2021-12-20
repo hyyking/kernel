@@ -1,11 +1,17 @@
 mod gdt;
 mod interrupts;
 
+use kcore::sync::SpinMutex;
+use keyboard::Keyboard;
 use libx64::{
     gdt::lgdt,
     idt::lidt,
     segments::{ltr, set_cs},
 };
+
+klazy! {
+    pub ref static KEYBOARD: SpinMutex<Keyboard> = SpinMutex::new(Keyboard::new());
+}
 
 #[inline(never)]
 pub fn kinit() {

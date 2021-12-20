@@ -11,6 +11,7 @@ members = [
     "drivers/page_mapper",
     "drivers/scheduler",
     "drivers/pic",
+    "drivers/keyboard",
     "drivers/vga",
     "drivers/serialuart16550",
 ]

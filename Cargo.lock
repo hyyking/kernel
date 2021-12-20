@@ -47,6 +47,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "futures-core"
+version = "0.3.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "629316e42fe7c2a0b9a65b47d159ceaa5453ab14e8f0a3c5eedbb8cd55b4a445"
+
+[[package]]
+name = "futures-task"
+version = "0.3.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dabf1872aaab32c886832f2276d2f5399887e2bd613698a02359e4ea83f8de12"
+
+[[package]]
+name = "futures-util"
+version = "0.3.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41d22213122356472061ac0f1ab2cee28d2bac8491410fd68c2af53d1cedb83e"
+dependencies = [
+ "futures-core",
+ "futures-task",
+ "pin-project-lite",
+ "pin-utils",
+]
+
+[[package]]
 name = "interrupt_list"
 version = "0.1.0"
 dependencies = [
@@ -61,6 +85,7 @@ name = "kcore"
 version = "0.1.0"
 dependencies = [
  "crossbeam-queue",
+ "futures-util",
  "libx64",
  "log",
 ]
@@ -73,6 +98,7 @@ dependencies = [
  "bootloader",
  "interrupt_list",
  "kcore",
+ "keyboard",
  "libx64",
  "log",
  "page_mapper",
@@ -81,6 +107,13 @@ dependencies = [
  "scheduler",
  "serialuart16550",
  "vga",
+]
+
+[[package]]
+name = "keyboard"
+version = "0.1.0"
+dependencies = [
+ "kcore",
 ]
 
 [[package]]
@@ -121,6 +154,18 @@ dependencies = [
  "bitfield",
  "libx64",
 ]
+
+[[package]]
+name = "pin-project-lite"
+version = "0.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d31d11c69a6b52a174b42bdc0c30e5e11670f90788b2c471c31c1d17d449443"
+
+[[package]]
+name = "pin-utils"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
 name = "proc-macro2"

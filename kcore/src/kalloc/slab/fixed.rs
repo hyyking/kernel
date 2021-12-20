@@ -42,12 +42,13 @@ where
         }
 
         let result = if self.len() % 2 == 0 {
-            let mut range = 0..(self.capacity() / 2);
+            let mut range = 0..(self.capacity() / 2 + 1);
             range.find_map(|i| self.try_alloc_at(i))
         } else {
-            let range = (self.capacity() / 2)..self.capacity();
+            let range = (self.capacity() / 2 + 1)..self.capacity();
             range.rev().find_map(|i| self.try_alloc_at(i))
         };
+
         result.ok_or(AllocError)
     }
 
