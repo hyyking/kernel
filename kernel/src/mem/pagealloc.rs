@@ -10,11 +10,11 @@ use libx64::{
 
 use alloc::alloc::{Allocator, Layout};
 
-use bootloader::bootinfo::{MemoryMap, MemoryRegionType};
+use bootloader::boot_info::{MemoryRegionKind, MemoryRegions};
 
 /// A [`FrameAllocator`] that returns usable frames from the bootloader's memory map.
 pub struct BootInfoFrameAllocator {
-    memory_map: &'static MemoryMap,
+    memory_map: &'static MemoryRegions,
     alloc: SpinMutex<Slab<4096>>,
 }
 
@@ -30,15 +30,12 @@ impl FrameAllocator<Page4Kb> for BootInfoFrameAllocator {
 }
 
 impl BootInfoFrameAllocator {
-    pub fn init(memory_map: &'static MemoryMap) -> Self {
+    pub fn init(memory_map: &'static MemoryRegions) -> Self {
         let mut iter = memory_map
             .iter()
-            .filter(|r| r.region_type == MemoryRegionType::Usable)
+            .filter(|r| r.kind == MemoryRegionKind::Usable)
             .map(|r| {
-                FrameRange::<Page4Kb>::new(
-                    PhysicalAddr::new(r.range.start_addr()),
-                    PhysicalAddr::new(r.range.end_addr()),
-                )
+                FrameRange::<Page4Kb>::new(PhysicalAddr::new(r.start), PhysicalAddr::new(r.end))
             });
 
         let page = iter.next().unwrap().start().as_u64();

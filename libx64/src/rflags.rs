@@ -1,4 +1,5 @@
 use bitflags::bitflags;
+use core::arch::asm;
 
 bitflags! {
     /// The RFLAGS register.

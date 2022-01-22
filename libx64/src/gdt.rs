@@ -1,4 +1,4 @@
-use core::marker::PhantomData;
+use core::{arch::asm, marker::PhantomData};
 
 use crate::{
     address::VirtualAddr,

@@ -1,3 +1,5 @@
+use core::arch::asm;
+
 use crate::{
     address::{PhysicalAddr, VirtualAddr},
     paging::{frame::PhysicalFrame, Page4Kb},

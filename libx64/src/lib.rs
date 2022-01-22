@@ -1,4 +1,4 @@
-#![feature(asm, never_type)]
+#![feature(never_type)]
 #![feature(abi_x86_interrupt)]
 #![no_std]
 #![allow(
@@ -8,6 +8,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss
 )]
+
+use core::arch::asm;
 
 pub mod address;
 pub mod control;

@@ -1,3 +1,5 @@
+use core::arch::asm;
+
 use crate::{address::VirtualAddr, descriptors::interrupt::IstIndex};
 
 use bitfield::bitfield;

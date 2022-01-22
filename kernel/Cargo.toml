@@ -10,7 +10,7 @@ test=false
 [features]
 
 [dependencies]
-bootloader = {version="0.9", features=["map_physical_memory"]}
+bootloader = {path="../bootloader"}
 
 libx64 = {path = "../libx64"}
 kcore = {path = "../kcore"}

@@ -1,4 +1,4 @@
-use bootloader::bootinfo::{MemoryMap, MemoryRegionType};
+use bootloader::boot_info::{MemoryRegion, MemoryRegionKind, MemoryRegions};
 use libx64::{
     address::PhysicalAddr,
     paging::{
@@ -15,7 +15,7 @@ pub struct MemoryContext<M, A> {
 }
 
 pub struct MemoryLayout {
-    memory_map: &'static MemoryMap,
+    memory_map: &'static MemoryRegions,
     pub low: FrameRange<Page4Kb>,
     pub high: FrameRange<Page4Kb>,
 }
@@ -34,15 +34,12 @@ impl<M, A> MemoryContext<M, A> {
 pub struct MemoryInitError;
 
 impl MemoryLayout {
-    pub fn init(memory_map: &'static MemoryMap) -> Result<Self, MemoryInitError> {
+    pub fn init(memory_map: &'static MemoryRegions) -> Result<Self, MemoryInitError> {
         let mut iter = memory_map
             .iter()
-            .filter(|r| r.region_type == MemoryRegionType::Usable)
+            .filter(|&r| r.kind == MemoryRegionKind::Usable)
             .map(|r| {
-                FrameRange::<Page4Kb>::new(
-                    PhysicalAddr::new(r.range.start_addr()),
-                    PhysicalAddr::new(r.range.end_addr()),
-                )
+                FrameRange::<Page4Kb>::new(PhysicalAddr::new(r.start), PhysicalAddr::new(r.end))
             });
         let low = iter.next().ok_or(MemoryInitError)?;
         let high = iter.next().ok_or(MemoryInitError)?;
@@ -57,7 +54,7 @@ impl MemoryLayout {
         })
     }
 
-    pub fn memory_map(&self) -> *const MemoryMap {
+    pub fn memory_map(&self) -> *const MemoryRegions {
         self.memory_map
     }
 }

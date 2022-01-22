@@ -1,5 +1,4 @@
 #![feature(custom_test_frameworks)]
-#![feature(asm)]
 #![feature(alloc_error_handler)]
 #![feature(allocator_api)]
 #![feature(abi_x86_interrupt)]
@@ -33,7 +32,9 @@ pub mod mem;
 
 bootloader::entry_point!(kmain);
 
-pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
+pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
+    libx64::hlt();
+
     qemu_logger::init().expect("unable to initialize logger");
 
     kprintln!("[OK] kernel loaded");
@@ -42,13 +43,13 @@ pub fn kmain(bi: &'static bootloader::BootInfo) -> ! {
     libx64::sti();
 
     {
-        let pmo = VirtualAddr::new(bi.physical_memory_offset);
+        let pmo = VirtualAddr::new(bi.physical_memory_offset.into_option().unwrap());
 
-        let layout = MemoryLayout::init(&bi.memory_map).expect("memory layout");
-        let walker = page_mapper::OffsetMapper::new(pmo);
-        let alloc = BootInfoFrameAllocator::init(&bi.memory_map);
-
-        let mut context = crate::mem::context::MemoryContext::new(layout, walker, alloc);
+        let mut context = crate::mem::context::MemoryContext::new(
+            MemoryLayout::init(&bi.memory_regions).expect("memory layout"),
+            page_mapper::OffsetMapper::new(pmo),
+            BootInfoFrameAllocator::init(&bi.memory_regions),
+        );
 
         mem::galloc::GLOBAL_ALLOC
             .map(&mut context.mapper, &mut context.alloc)
