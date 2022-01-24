@@ -33,7 +33,7 @@ impl_register_handler!(Handler CodeHandler DivergingCodeHandler);
 pub struct InterruptFrame {
     pub instruction_ptr: VirtualAddr,
     pub code_segment: u64,
-    pub rflags: u64,
+    pub rflags: crate::rflags::RFlags,
     pub stack_pointer: VirtualAddr,
     pub segment_selector: u64,
 }

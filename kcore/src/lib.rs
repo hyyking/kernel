@@ -5,13 +5,19 @@
 #[cfg(test)]
 extern crate std;
 
+#[cfg(feature = "alloc")]
 extern crate alloc;
+#[cfg(feature = "alloc")]
+pub mod kalloc;
+#[cfg(feature = "alloc")]
+pub mod resource;
 
+#[allow(unused_imports)]
 #[macro_use]
 extern crate log;
 
 pub mod either;
-pub mod kalloc;
+
 pub mod ptr;
 
 pub mod queue {
@@ -19,6 +25,7 @@ pub mod queue {
 }
 
 pub mod futures {
+    #[cfg(feature = "alloc")]
     pub mod task {
         pub use futures_util::task::{waker, ArcWake, AtomicWaker};
     }
@@ -28,6 +35,5 @@ pub mod futures {
     }
 }
 
-pub mod resource;
 pub mod sync;
 pub mod tables;

@@ -4,16 +4,24 @@
 #[cfg(not(target_os = "none"))]
 compile_error!("The bootloader crate must be compiled for the `x86_64-bootloader.json` target");
 
-use bootloader::{
-    binary::SystemInfo,
-    boot_info::{FrameBufferInfo, PixelFormat},
-};
 use core::{
     arch::{asm, global_asm},
+    convert::TryFrom,
     panic::PanicInfo,
+    ptr::NonNull,
     slice,
 };
-use usize_conversions::usize_from;
+
+use bootloader::{
+    binary::SystemInfo,
+    binary::{legacy_memory_region::LegacyFrameAllocator, memory_descriptor::E820MemoryRegion},
+    boot_info::{FrameBufferInfo, PixelFormat},
+};
+
+use rsdp::{
+    handler::{AcpiHandler, PhysicalMapping},
+    Rsdp,
+};
 use x86_64::structures::paging::{FrameAllocator, OffsetPageTable};
 use x86_64::structures::paging::{
     Mapper, PageTable, PageTableFlags, PhysFrame, Size2MiB, Size4KiB,
@@ -75,13 +83,9 @@ fn bootloader_main(
     memory_map_addr: VirtAddr,
     memory_map_entry_count: u64,
 ) -> ! {
-    use bootloader::binary::{
-        bios::memory_descriptor::E820MemoryRegion, legacy_memory_region::LegacyFrameAllocator,
-    };
-
     let e820_memory_map = {
-        let ptr = usize_from(memory_map_addr.as_u64()) as *const E820MemoryRegion;
-        unsafe { slice::from_raw_parts(ptr, usize_from(memory_map_entry_count)) }
+        let ptr = usize::try_from(memory_map_addr.as_u64()).unwrap() as *const E820MemoryRegion;
+        unsafe { slice::from_raw_parts(ptr, usize::try_from(memory_map_entry_count).unwrap()) }
     };
     let max_phys_addr = e820_memory_map
         .iter()
@@ -160,7 +164,7 @@ fn bootloader_main(
 
     let kernel = {
         let ptr = kernel_start.as_u64() as *const u8;
-        unsafe { slice::from_raw_parts(ptr, usize_from(kernel_size)) }
+        unsafe { slice::from_raw_parts(ptr, usize::try_from(kernel_size).unwrap()) }
     };
 
     let system_info = SystemInfo {
@@ -186,9 +190,6 @@ fn init_logger(
     stride: usize,
     pixel_format: PixelFormat,
 ) -> FrameBufferInfo {
-    let ptr = framebuffer_start.as_u64() as *mut u8;
-    let slice = unsafe { slice::from_raw_parts_mut(ptr, framebuffer_size) };
-
     let info = bootloader::boot_info::FrameBufferInfo {
         byte_len: framebuffer_size,
         horizontal_resolution,
@@ -198,7 +199,7 @@ fn init_logger(
         pixel_format,
     };
 
-    bootloader::binary::init_logger(slice, info);
+    qemu_logger::init();
 
     info
 }
@@ -242,12 +243,6 @@ fn create_page_tables(
 }
 
 fn detect_rsdp() -> Option<PhysAddr> {
-    use core::ptr::NonNull;
-    use rsdp::{
-        handler::{AcpiHandler, PhysicalMapping},
-        Rsdp,
-    };
-
     #[derive(Clone)]
     struct IdentityMapped;
     impl AcpiHandler for IdentityMapped {
@@ -277,12 +272,7 @@ fn detect_rsdp() -> Option<PhysAddr> {
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    unsafe {
-        bootloader::binary::logger::LOGGER
-            .get()
-            .map(|l| l.force_unlock())
-    };
-    log::error!("{}", info);
+    log::error!("[PANIC]: {}", info);
     loop {
         unsafe { asm!("cli; hlt") };
     }

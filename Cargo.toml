@@ -20,6 +20,7 @@ members = [
     "drivers/pic",
     "drivers/keyboard",
     "drivers/vga",
+    "drivers/framebuffer",
     "drivers/serialuart16550",
 ]
 

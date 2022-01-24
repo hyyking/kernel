@@ -1,15 +1,17 @@
+use core::{
+    arch::asm,
+    convert::TryFrom,
+    mem::{self, MaybeUninit},
+    slice,
+};
+
 use crate::{
     binary::legacy_memory_region::{LegacyFrameAllocator, LegacyMemoryRegion},
     boot_info::{BootInfo, FrameBuffer, FrameBufferInfo, MemoryRegion, TlsTemplate},
 };
-use core::{
-    arch::asm,
-    mem::{self, MaybeUninit},
-    slice,
-};
+
 use level_4_entries::UsedLevel4Entries;
 use parsed_config::CONFIG;
-use usize_conversions::FromUsize;
 use x86_64::{
     structures::paging::{
         FrameAllocator, Mapper, OffsetPageTable, Page, PageTableFlags, PageTableIndex, PhysFrame,
@@ -18,8 +20,6 @@ use x86_64::{
     PhysAddr, VirtAddr,
 };
 
-pub mod bios;
-
 mod gdt;
 /// Provides a frame allocator based on a BIOS or UEFI memory map.
 pub mod legacy_memory_region;
@@ -27,8 +27,7 @@ pub mod legacy_memory_region;
 pub mod level_4_entries;
 /// Implements a loader for the kernel ELF binary.
 pub mod load_kernel;
-/// Provides a logger type that logs output as text to pixel-based framebuffers.
-pub mod logger;
+pub mod memory_descriptor;
 
 // Contains the parsed configuration table from the kernel's Cargo.toml.
 //
@@ -44,14 +43,6 @@ pub mod logger;
 include!(concat!(env!("OUT_DIR"), "/bootloader_config.rs"));
 
 const PAGE_SIZE: u64 = 4096;
-
-/// Initialize a text-based logger using the given pixel-based framebuffer as output.  
-pub fn init_logger(framebuffer: &'static mut [u8], info: FrameBufferInfo) {
-    let logger = logger::LOGGER.get_or_init(move || logger::LockedLogger::new(framebuffer, info));
-    log::set_logger(logger).expect("logger already set");
-    log::set_max_level(log::LevelFilter::Trace);
-    log::info!("Framebuffer info: {:?}", info);
-}
 
 /// Required system information that should be queried from the BIOS or UEFI firmware.
 #[derive(Debug, Copy, Clone)]
@@ -190,7 +181,7 @@ where
         for (i, frame) in
             PhysFrame::range_inclusive(framebuffer_start_frame, framebuffer_end_frame).enumerate()
         {
-            let page = start_page + u64::from_usize(i);
+            let page = start_page + u64::try_from(i).unwrap();
             let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
             match unsafe { kernel_page_table.map_to(page, frame, flags, frame_allocator) } {
                 Ok(tlb) => tlb.flush(),
@@ -308,7 +299,7 @@ where
         let boot_info_addr = boot_info_location(&mut mappings.used_entries);
         let boot_info_end = boot_info_addr + mem::size_of::<BootInfo>();
         let memory_map_regions_addr =
-            boot_info_end.align_up(u64::from_usize(mem::align_of::<MemoryRegion>()));
+            boot_info_end.align_up(u64::try_from(mem::align_of::<MemoryRegion>()).unwrap());
         let regions = frame_allocator.len() + 1; // one region might be split into used/unused
         let memory_map_regions_end =
             memory_map_regions_addr + regions * mem::size_of::<MemoryRegion>();
@@ -427,9 +418,9 @@ unsafe fn context_switch(addresses: Addresses) -> ! {
             in(reg) addresses.stack_top.as_u64(),
             in(reg) addresses.entry_point.as_u64(),
             in("rdi") addresses.boot_info as *const _ as usize,
+            options(noreturn)
         );
     }
-    unreachable!();
 }
 
 /// Memory addresses required for the context switch.

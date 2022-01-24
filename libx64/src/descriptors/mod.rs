@@ -33,13 +33,13 @@ pub enum GdtEntry {
     System(SystemSegmentDescriptor),
 }
 
-pub trait AsGdtEntry {
+pub trait ToGdtEntry {
     fn to_gdt_entry(self) -> GdtEntry;
 }
 
 macro_rules! as_gdt_impl {
     ($type:ty, $kind:ident, $version:ident, $field:ident) => {
-        impl AsGdtEntry for $type {
+        impl ToGdtEntry for $type {
             #[inline]
             fn to_gdt_entry(self) -> GdtEntry {
                 GdtEntry::$kind($version { $field: self })
@@ -47,7 +47,7 @@ macro_rules! as_gdt_impl {
         }
     };
     ($type:ty, $kind:ident) => {
-        impl AsGdtEntry for $type {
+        impl ToGdtEntry for $type {
             #[inline]
             fn to_gdt_entry(self) -> GdtEntry {
                 GdtEntry::$kind(self)
@@ -56,7 +56,7 @@ macro_rules! as_gdt_impl {
     };
 }
 
-impl AsGdtEntry for GdtNull {
+impl ToGdtEntry for GdtNull {
     #[inline]
     fn to_gdt_entry(self) -> GdtEntry {
         GdtEntry::Null

@@ -135,7 +135,7 @@ where
     F: FrameAllocator<Size4KiB>,
 {
     fn handle_load_segment(&mut self, segment: ProgramHeader) -> Result<(), &'static str> {
-        log::info!("Handling Segment: {:x?}", segment);
+        log::info!("Handling Segment: {:#x?}", segment);
 
         let phys_start_addr = self.kernel_offset + segment.offset();
         let start_frame: PhysFrame = PhysFrame::containing_address(phys_start_addr);

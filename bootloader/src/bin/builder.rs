@@ -24,6 +24,14 @@ struct BuildArguments {
     #[argh(switch)]
     run: bool,
 
+    /// whether to run the resulting binary in QEMU
+    #[argh(switch)]
+    gdb: bool,
+
+    /// whether to run the resulting binary in QEMU
+    #[argh(switch)]
+    dump: bool,
+
     /// suppress stdout output
     #[argh(switch)]
     quiet: bool,
@@ -41,12 +49,13 @@ struct BuildArguments {
     out_dir: Option<PathBuf>,
 }
 
-/// Firmware must be one of `uefi`, `bios`, or `all`.
-#[derive(Debug, displaydoc::Display, Eq, PartialEq, Copy, Clone)]
-struct FirmwareParseError;
-
 fn main() -> io::Result<()> {
     let args: BuildArguments = argh::from_env();
+
+    let mut cmd = Command::new(env!("CARGO"));
+    cmd.current_dir("kernel");
+    cmd.args(&["build"]);
+    assert!(cmd.status()?.success());
 
     let mut cmd = Command::new(env!("CARGO"));
     cmd.current_dir("bootloader");
@@ -115,17 +124,24 @@ fn main() -> io::Result<()> {
     }
 
     if args.run {
-        bios_run(&output_bin_path)?;
+        bios_run(&output_bin_path, args.gdb, args.dump)?;
     }
 
     Ok(())
 }
 
-fn bios_run(bin_path: &Path) -> io::Result<Option<ExitCode>> {
+fn bios_run(bin_path: &Path, gdb: bool, dump: bool) -> io::Result<Option<ExitCode>> {
     let mut qemu = Command::new("qemu-system-x86_64");
     qemu.arg("-drive")
         .arg(format!("format=raw,file={}", bin_path.display()))
-        .args(&["-d", "cpu_reset"]);
+        .args(&["-serial", "stdio"]);
+
+    if gdb {
+        qemu.args(&["-s", "-S"]);
+    }
+    if dump {
+        qemu.args(&["-d", "int,cpu_reset", "-no-reboot"]);
+    }
 
     println!("{:?}", qemu);
     let exit_status = qemu.status()?;

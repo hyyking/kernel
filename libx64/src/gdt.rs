@@ -2,15 +2,17 @@ use core::{arch::asm, marker::PhantomData};
 
 use crate::{
     address::VirtualAddr,
-    descriptors::{AsGdtEntry, GdtEntry},
+    descriptors::{GdtEntry, ToGdtEntry},
     segments::SegmentSelector,
     Privilege,
 };
 
+const GDT_ENTRIES: usize = 8;
+
 #[derive(Clone, Copy)]
-#[repr(C, align(8))]
+#[repr(C)]
 pub struct GlobalDescriptorTable {
-    entries: [u64; 8],
+    entries: [u64; GDT_ENTRIES],
     at: u16,
 }
 
@@ -36,7 +38,7 @@ impl GlobalDescriptorTable {
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            entries: [0_u64; 8],
+            entries: [0_u64; GDT_ENTRIES],
             at: 0,
         }
     }
@@ -59,7 +61,7 @@ impl GlobalDescriptorTable {
     }
 
     #[inline]
-    pub fn add_entry<T: AsGdtEntry>(&mut self, entry: T) -> SegmentSelector {
+    pub fn add_entry<T: ToGdtEntry>(&mut self, entry: T) -> SegmentSelector {
         let idx = match entry.to_gdt_entry() {
             GdtEntry::Null => self.push(0),
             GdtEntry::User(user) => unsafe {

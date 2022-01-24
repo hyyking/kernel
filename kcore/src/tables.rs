@@ -23,6 +23,7 @@ pub mod idt {
 pub mod gdt {
     use libx64::segments::SegmentSelector;
 
+    #[derive(Debug)]
     pub struct Selectors {
         pub code_segment: SegmentSelector,
         pub task_state: SegmentSelector,

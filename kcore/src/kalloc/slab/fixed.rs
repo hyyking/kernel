@@ -1,4 +1,4 @@
-use alloc::alloc::{AllocError, Allocator, Layout};
+use core::alloc::{AllocError, Allocator, Layout};
 use core::ptr::NonNull;
 
 use libx64::paging::{page::Page, Page4Kb};

@@ -14,6 +14,16 @@ bitfield! {
     }
 }
 
+bitfield! {
+    #[derive(Copy, Clone)]
+    #[repr(transparent)]
+    pub unsafe struct SegmentSelectorError: u32 {
+        pub external: 0..1,
+        pub tbl: 1..3,
+        pub index: 3..16,
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct TaskStateSegment {
@@ -132,6 +142,14 @@ pub fn ss() -> u16 {
         let segment: u16;
         asm!("mov {0:x}, ss", out(reg) segment, options(nomem, nostack, preserves_flags));
         segment
+    }
+}
+
+#[inline]
+#[must_use]
+pub fn set_ss(ss: u64) {
+    unsafe {
+        asm!("mov ss, {}", in(reg) ss, options(nomem, nostack, preserves_flags));
     }
 }
 

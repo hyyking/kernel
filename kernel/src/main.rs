@@ -33,15 +33,24 @@ pub mod mem;
 bootloader::entry_point!(kmain);
 
 pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
-    libx64::hlt();
-
     qemu_logger::init().expect("unable to initialize logger");
 
-    kprintln!("[OK] kernel loaded");
+    // kprintln!("[OK] kernel loaded");
 
     init::kinit();
     libx64::sti();
 
+    let f = bi.framebuffer.as_mut().unwrap();
+    let info = f.info();
+    let mut fb = framebuffer::Framebuffer::new(f.buffer_mut(), info);
+
+    fb.draw(&framebuffer::Character::new('H', 50, 50)).unwrap();
+    fb.draw(&framebuffer::Character::new('e', 60, 50)).unwrap();
+    fb.draw(&framebuffer::Character::new('l', 70, 50)).unwrap();
+    fb.draw(&framebuffer::Character::new('l', 80, 50)).unwrap();
+    fb.draw(&framebuffer::Character::new('o', 90, 50)).unwrap();
+
+    /*
     {
         let pmo = VirtualAddr::new(bi.physical_memory_offset.into_option().unwrap());
 
@@ -55,9 +64,7 @@ pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
             .map(&mut context.mapper, &mut context.alloc)
             .expect("unable to map the global allocator");
 
-        dbg!("HERE");
-        /*
-         * let mut scheduler = Scheduler::new();
+          let mut scheduler = Scheduler::new();
 
         scheduler.spawn(async {
             use kcore::futures::stream::StreamExt;
@@ -67,20 +74,19 @@ pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
             }
         });
         scheduler.run();
-        */
     }
+    */
 
     #[cfg(test)]
     test_main();
 
-    kprintln!("didn't crash");
-
+    // kprintln!("didn't crash");
     libx64::diverging_hlt();
 }
 
 #[panic_handler]
 fn ph(info: &PanicInfo) -> ! {
-    kprintln!("[PANIC]: {}", info);
+    // kprintln!("[PANIC]: {}", info);
     error!("PANIC => {}", info);
     libx64::diverging_hlt();
 }

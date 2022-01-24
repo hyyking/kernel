@@ -12,8 +12,8 @@ klazy! {
         let mut gdt = GlobalDescriptorTable::new();
 
         gdt.add_entry(GdtNull);
-        let code_segment = gdt.add_entry(CodeSegmentDescriptor::kernel_x64());
-        let task_state =   gdt.add_entry(SystemSegmentDescriptor::from(&*TSS));
+        let code_segment = gdt.add_entry(dbg!(CodeSegmentDescriptor::kernel_x64()));
+        let task_state = gdt.add_entry(dbg!(SystemSegmentDescriptor::from(&*TSS)));
 
 
         (gdt, Selectors {
@@ -24,11 +24,11 @@ klazy! {
 }
 
 klazy! {
-    ref static TSS: TaskStateSegment = {
+    pub ref static TSS: TaskStateSegment = {
         let mut tss = TaskStateSegment::zero();
 
         tss.ist[IstEntry::DoubleFault] = {
-            const STACK_SIZE: usize = 4096 * 8; // 8Kib stack
+            const STACK_SIZE: usize = 4096 * 8; // 32Kb stack
 
             #[repr(align(16))]
             pub struct Stack([u8; STACK_SIZE]);

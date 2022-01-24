@@ -2,6 +2,7 @@ use bitflags::bitflags;
 use core::arch::asm;
 
 bitflags! {
+    #[repr(C)]
     /// The RFLAGS register.
     pub struct RFlags: u64 {
         /// Processor feature identification flag.
