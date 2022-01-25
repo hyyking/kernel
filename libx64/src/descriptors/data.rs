@@ -11,6 +11,43 @@ pub struct DataSegmentDescriptor {
     base_high: u8,
 }
 
+impl DataSegmentDescriptor {
+    #[inline]
+    #[must_use]
+    pub const fn empty() -> Self {
+        Self {
+            limit_low: 0,
+            base_low: 0,
+            middle_base: 0,
+            flags: DsFlags::zero(),
+            limit_flags: FlagsLimit::zero(),
+            base_high: 0,
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn kernel_x64() -> Self {
+        let mut this = Self::empty();
+        this.limit_low = u16::MAX;
+
+        this.flags = this
+            .flags
+            .set_writable(1)
+            .set_access(1)
+            .set_res2(1)
+            .set_presence(1);
+
+        this.limit_flags = this
+            .limit_flags
+            .set_granularity(1)
+            .set_dl(1)
+            .set_limit_high(0b1111);
+
+        this
+    }
+}
+
 bitfield! {
     #[derive(Clone, Copy)]
     #[repr(transparent)]
@@ -79,4 +116,10 @@ bitfield! {
         /// the limit field equals the number of 4-Kbyte blocks available in the segment.
         granularity: 7..8,
     }
+}
+
+#[test]
+fn kernel_segment() {
+    let a = unsafe { core::mem::transmute::<_, u64>(DataSegmentDescriptor::kernel_x64()) };
+    assert_eq!(a, 0x00cf93000000ffff);
 }

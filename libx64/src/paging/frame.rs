@@ -112,7 +112,7 @@ where
     #[inline]
     #[must_use]
     pub const fn end(&self) -> PhysicalAddr {
-        self.start
+        self.end
     }
 
     #[inline]

@@ -132,28 +132,31 @@ fn bootloader_main(
         let framebuffer_size =
             usize::from(VBEModeInfo_yresolution) * usize::from(VBEModeInfo_bytesperscanline);
         let bytes_per_pixel = VBEModeInfo_bitsperpixel / 8;
-        init_logger(
-            framebuffer_addr,
-            framebuffer_size.into(),
-            VBEModeInfo_xresolution.into(),
-            VBEModeInfo_yresolution.into(),
-            bytes_per_pixel.into(),
-            (VBEModeInfo_bytesperscanline / u16::from(bytes_per_pixel)).into(),
-            match (
-                VBEModeInfo_redfieldposition,
-                VBEModeInfo_greenfieldposition,
-                VBEModeInfo_bluefieldposition,
-            ) {
-                (0, 8, 16) => PixelFormat::RGB,
-                (16, 8, 0) => PixelFormat::BGR,
-                (r, g, b) => {
-                    error = Some(("invalid rgb field positions", r, g, b));
-                    PixelFormat::RGB // default to RBG so that we can print something
-                }
-            },
-        )
+
+        let pixel_format = match (
+            VBEModeInfo_redfieldposition,
+            VBEModeInfo_greenfieldposition,
+            VBEModeInfo_bluefieldposition,
+        ) {
+            (0, 8, 16) => PixelFormat::RGB,
+            (16, 8, 0) => PixelFormat::BGR,
+            (r, g, b) => {
+                error = Some(("invalid rgb field positions", r, g, b));
+                PixelFormat::RGB // default to RBG so that we can print something
+            }
+        };
+
+        FrameBufferInfo {
+            byte_len: framebuffer_size.into(),
+            horizontal_resolution: VBEModeInfo_xresolution.into(),
+            vertical_resolution: VBEModeInfo_yresolution.into(),
+            bytes_per_pixel: bytes_per_pixel.into(),
+            stride: (VBEModeInfo_bytesperscanline / u16::from(bytes_per_pixel)).into(),
+            pixel_format,
+        }
     };
 
+    qemu_logger::init().expect("unable to initialize logger");
     log::info!("BIOS boot");
 
     if let Some((msg, r, g, b)) = error {
@@ -179,29 +182,6 @@ fn bootloader_main(
         page_tables,
         system_info,
     );
-}
-
-fn init_logger(
-    framebuffer_start: PhysAddr,
-    framebuffer_size: usize,
-    horizontal_resolution: usize,
-    vertical_resolution: usize,
-    bytes_per_pixel: usize,
-    stride: usize,
-    pixel_format: PixelFormat,
-) -> FrameBufferInfo {
-    let info = bootloader::boot_info::FrameBufferInfo {
-        byte_len: framebuffer_size,
-        horizontal_resolution,
-        vertical_resolution,
-        bytes_per_pixel,
-        stride,
-        pixel_format,
-    };
-
-    qemu_logger::init();
-
-    info
 }
 
 /// Creates page table abstraction types for both the bootloader and kernel page tables.

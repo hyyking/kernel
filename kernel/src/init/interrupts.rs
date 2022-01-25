@@ -38,7 +38,7 @@ pub extern "x86-interrupt" fn invalid_tss(f: InterruptFrame, code: u64) {
 
 pub extern "x86-interrupt" fn general_protection(f: InterruptFrame, code: u64) {
     let code = unsafe { libx64::segments::SegmentSelectorError::raw(code as u32) };
-    // panic!("#GP\nCode: {:#?}\nFrame: {:#?}", code, f);
+    panic!("#GP\nCode: {:#?}\nFrame: {:#?}", code, f);
 }
 
 pub extern "x86-interrupt" fn page_fault(f: InterruptFrame, code: u64) {
@@ -68,9 +68,9 @@ pub mod user {
     pub extern "x86-interrupt" fn keyboard(_f: InterruptFrame) {
         use libx64::port::RPort;
 
-        static kb: RPort<u8> = RPort::new(0x60);
+        static KB: RPort<u8> = RPort::new(0x60);
 
-        unsafe { KEYBOARD.lock().add_value(dbg!(kb.read())) };
+        unsafe { dbg!(KB.read()) };
 
         PICS.lock().interupt_fn(IntIdx::Keyboard).expect("keyboard");
     }

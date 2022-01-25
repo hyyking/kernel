@@ -15,7 +15,6 @@ use parsed_config::CONFIG;
 use x86_64::{
     structures::paging::{
         FrameAllocator, Mapper, OffsetPageTable, Page, PageTableFlags, PageTableIndex, PhysFrame,
-        Size2MiB,
     },
     PhysAddr, VirtAddr,
 };
@@ -27,6 +26,7 @@ pub mod legacy_memory_region;
 pub mod level_4_entries;
 /// Implements a loader for the kernel ELF binary.
 pub mod load_kernel;
+/// E380 Memory region
 pub mod memory_descriptor;
 
 // Contains the parsed configuration table from the kernel's Cargo.toml.
@@ -162,7 +162,10 @@ where
     let gdt_frame = frame_allocator
         .allocate_frame()
         .expect("failed to allocate GDT frame");
-    gdt::create_and_load(gdt_frame);
+    gdt::create_and_load(libx64::paging::frame::PhysicalFrame::containing(
+        libx64::address::PhysicalAddr::new(gdt_frame.start_address().as_u64()),
+    ));
+
     match unsafe {
         kernel_page_table.identity_map(gdt_frame, PageTableFlags::PRESENT, frame_allocator)
     } {
@@ -197,54 +200,9 @@ where
         None
     };
 
-    let physical_memory_offset = if CONFIG.map_physical_memory {
-        log::info!("Map physical memory");
-        let offset = CONFIG
-            .physical_memory_offset
-            .map(VirtAddr::new)
-            .unwrap_or_else(|| used_entries.get_free_address());
+    let physical_memory_offset = None;
 
-        let start_frame = PhysFrame::containing_address(PhysAddr::new(0));
-        let max_phys = frame_allocator.max_phys_addr();
-        let end_frame: PhysFrame<Size2MiB> = PhysFrame::containing_address(max_phys - 1u64);
-        for frame in PhysFrame::range_inclusive(start_frame, end_frame) {
-            let page = Page::containing_address(offset + frame.start_address().as_u64());
-            let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
-            match unsafe { kernel_page_table.map_to(page, frame, flags, frame_allocator) } {
-                Ok(tlb) => tlb.ignore(),
-                Err(err) => panic!(
-                    "failed to map page {:?} to frame {:?}: {:?}",
-                    page, frame, err
-                ),
-            };
-        }
-
-        Some(offset)
-    } else {
-        None
-    };
-
-    let recursive_index = if CONFIG.map_page_table_recursively {
-        log::info!("Map page table recursively");
-        let index = CONFIG
-            .recursive_index
-            .map(PageTableIndex::new)
-            .unwrap_or_else(|| used_entries.get_free_entry());
-
-        let entry = &mut kernel_page_table.level_4_table()[index];
-        if !entry.is_unused() {
-            panic!(
-                "Could not set up recursive mapping: index {} already in use",
-                u16::from(index)
-            );
-        }
-        let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
-        entry.set_frame(page_tables.kernel_level_4_frame, flags);
-
-        Some(index)
-    } else {
-        None
-    };
+    let recursive_index = None;
 
     Mappings {
         framebuffer: framebuffer_virt_addr,

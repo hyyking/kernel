@@ -115,3 +115,14 @@ bitfield! {
         granularity: 7..8,
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn kernel_segment() {
+        let a = unsafe { core::mem::transmute::<_, u64>(CodeSegmentDescriptor::kernel_x64()) };
+        assert_eq!(a, 0x00af9b000000ffff);
+    }
+}

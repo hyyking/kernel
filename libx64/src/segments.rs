@@ -111,6 +111,13 @@ pub fn es() -> u16 {
 }
 
 #[inline]
+pub fn set_es(es: SegmentSelector) {
+    unsafe {
+        asm!("mov es, {0:x}", in(reg) es.0, options(nostack, preserves_flags));
+    }
+}
+
+#[inline]
 #[must_use]
 pub fn cs() -> u16 {
     unsafe {
@@ -146,10 +153,9 @@ pub fn ss() -> u16 {
 }
 
 #[inline]
-#[must_use]
-pub fn set_ss(ss: u64) {
+pub fn set_ss(ss: SegmentSelector) {
     unsafe {
-        asm!("mov ss, {}", in(reg) ss, options(nomem, nostack, preserves_flags));
+        asm!("mov ss, {0:x}", in(reg) ss.0, options(nostack, preserves_flags));
     }
 }
 
@@ -160,6 +166,13 @@ pub fn ds() -> u16 {
         let segment: u16;
         asm!("mov {0:x}, ds", out(reg) segment, options(nomem, nostack, preserves_flags));
         segment
+    }
+}
+
+#[inline]
+pub fn set_ds(ds: SegmentSelector) {
+    unsafe {
+        asm!("mov ds, {0:x}", in(reg) ds.0, options(nostack, preserves_flags));
     }
 }
 

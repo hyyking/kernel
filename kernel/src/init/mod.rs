@@ -6,7 +6,7 @@ use keyboard::Keyboard;
 use libx64::{
     gdt::lgdt,
     idt::lidt,
-    segments::{ltr, set_cs, set_ss},
+    segments::{ltr, set_cs, set_ss, SegmentSelector},
 };
 
 klazy! {
@@ -21,7 +21,7 @@ pub fn kinit() {
     trace!("GDT Initialized");
 
     set_cs(segments.code_segment);
-    set_ss(0); // https://github.com/rust-osdev/bootloader/issues/196
+    set_ss(SegmentSelector::zero()); // https://github.com/rust-osdev/bootloader/issues/196
     ltr(segments.task_state);
 
     trace!("Segments switched");

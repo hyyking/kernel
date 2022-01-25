@@ -126,20 +126,6 @@ where
                         MemoryRegionKind::Usable
                     }
                 }
-                // some mappings created by the UEFI firmware become usable again at this point
-                #[cfg(feature = "uefi_bin")]
-                MemoryRegionKind::UnknownUefi(other) => {
-                    use uefi::table::boot::MemoryType as M;
-                    match M(other) {
-                        M::LOADER_CODE
-                        | M::LOADER_DATA
-                        | M::BOOT_SERVICES_CODE
-                        | M::BOOT_SERVICES_DATA
-                        | M::RUNTIME_SERVICES_CODE
-                        | M::RUNTIME_SERVICES_DATA => MemoryRegionKind::Usable,
-                        other => MemoryRegionKind::UnknownUefi(other.0),
-                    }
-                }
                 other => other,
             };
 

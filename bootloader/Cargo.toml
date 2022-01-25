@@ -28,6 +28,8 @@ thiserror = { version = "1.0.20", optional = true }
 json = { version = "0.12.4", optional = true }
 rsdp = { version = "1.0.0", optional = true }
 
+libx64 = {path = "../libx64", optional = true}
+
 
 [build-dependencies]
 llvm-tools-build = { version = "0.1", optional = true, package = "llvm-tools" }
@@ -42,5 +44,5 @@ builder = ["argh", "thiserror", "llvm-tools", "json"]
 bios_bin = ["binary", "rsdp"]
 binary = [
     "llvm-tools-build", "x86_64", "toml", "xmas-elf", "log",
-    "serde", "quote", "proc-macro2", "qemu_logger" 
+    "serde", "quote", "proc-macro2", "qemu_logger", "libx64",
 ]
