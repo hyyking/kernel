@@ -7,13 +7,11 @@ use libx64::{
     paging::{
         entry::Flags,
         frame::{FrameAllocator, FrameError, FrameRange, PhysicalFrame},
-        page::{Page, PageMapper, PageRange, TlbFlush},
+        page::{Page, PageMapper, PageRange, PageTranslator, TlbFlush},
         table::Translation,
         Page4Kb,
     },
 };
-
-use page_mapper::OffsetMapper;
 
 use xmas_elf::{
     dynamic, header,
@@ -25,25 +23,26 @@ use xmas_elf::{
 /// Used by [`Inner::make_mut`] and [`Inner::clean_copied_flag`].
 const COPIED: Flags = Flags::AVL1;
 
-struct Loader<'a, F> {
+struct Loader<'a, F, M> {
     elf_file: ElfFile<'a>,
-    inner: Inner<'a, F>,
+    inner: Inner<'a, F, M>,
 }
 
-struct Inner<'a, F> {
+struct Inner<'a, F, M> {
     kernel_offset: PhysicalAddr,
     virtual_address_offset: u64,
-    page_table: &'a mut OffsetMapper,
+    page_table: &'a mut M,
     frame_allocator: &'a mut F,
 }
 
-impl<'a, F> Loader<'a, F>
+impl<'a, F, M> Loader<'a, F, M>
 where
     F: FrameAllocator<Page4Kb>,
+    M: PageMapper<Page4Kb> + PageTranslator,
 {
     fn new(
         bytes: &'a [u8],
-        page_table: &'a mut OffsetMapper,
+        page_table: &'a mut M,
         frame_allocator: &'a mut F,
     ) -> Result<Self, &'static str> {
         info!("Elf file loaded at {:#p}", bytes);
@@ -134,9 +133,10 @@ where
     }
 }
 
-impl<'a, F> Inner<'a, F>
+impl<'a, F, M> Inner<'a, F, M>
 where
     F: FrameAllocator<Page4Kb>,
+    M: PageMapper<Page4Kb> + PageTranslator,
 {
     fn handle_load_segment(&mut self, segment: ProgramHeader) -> Result<(), FrameError> {
         info!("Handling Segment: {:#x?}", segment);
@@ -499,11 +499,15 @@ fn check_is_in_load(elf_file: &ElfFile, virt_offset: u64) -> Result<(), &'static
 ///
 /// Returns the kernel entry point address, it's thread local storage template (if any),
 /// and a structure describing which level 4 page table entries are in use.  
-pub fn load_kernel(
+pub fn load_kernel<M, A>(
     bytes: &[u8],
-    page_table: &mut OffsetMapper,
-    frame_allocator: &mut impl FrameAllocator<Page4Kb>,
-) -> Result<(VirtualAddr, Option<TlsTemplate>, UsedLevel4Entries), &'static str> {
+    page_table: &mut M,
+    frame_allocator: &mut A,
+) -> Result<(VirtualAddr, Option<TlsTemplate>, UsedLevel4Entries), &'static str>
+where
+    A: FrameAllocator<Page4Kb>,
+    M: PageMapper<Page4Kb> + PageTranslator,
+{
     let mut loader = Loader::new(bytes, page_table, frame_allocator)?;
     let tls_template = loader.load_segments()?;
     let used_entries = loader.used_level_4_entries();

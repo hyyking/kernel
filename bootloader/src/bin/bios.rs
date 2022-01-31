@@ -10,8 +10,8 @@ use core::{
 };
 
 use bootloader::{
-    binary::SystemInfo,
-    binary::{legacy_memory_region::LegacyFrameAllocator, memory_descriptor::E820MemoryRegion},
+    binary::memory::{BiosFrameAllocator, E820MemoryMap},
+    binary::{PageTables, SystemInfo},
     boot_info::{FrameBufferInfo, PixelFormat},
 };
 
@@ -91,29 +91,17 @@ fn bootloader_main(
     qemu_logger::init().expect("unable to initialize logger");
     log::info!("BIOS boot");
 
-    let e820_memory_map = unsafe {
-        let ptr = memory_map_addr.ptr::<E820MemoryRegion>().unwrap().as_ref();
-        slice::from_raw_parts(ptr, usize::try_from(memory_map_entry_count).unwrap())
-    };
+    let kernel_end = PhysicalFrame::<Page4Kb>::containing(kernel_start + kernel_size - 1u64);
+    let next_free = PhysicalFrame::<Page4Kb>::containing(kernel_end.ptr() + Page4Kb);
 
-    let max_phys_addr = e820_memory_map
-        .iter()
-        .map(|r| r.start_addr + r.len)
-        .max()
-        .expect("no physical memory regions found");
+    let memory_map = E820MemoryMap::from_memory(
+        memory_map_addr,
+        usize::try_from(memory_map_entry_count).unwrap(),
+        next_free,
+    );
 
-    let mut frame_allocator = {
-        let kernel_end = PhysicalFrame::<Page4Kb>::containing(kernel_start + kernel_size - 1u64);
-        let next_free = PhysicalFrame::<Page4Kb>::containing(kernel_end.ptr() + Page4Kb);
-        LegacyFrameAllocator::new_starting_at(next_free, e820_memory_map)
-    };
-    let frame = frame_allocator.alloc().unwrap();
-    let memory_map = unsafe {
-        let ptr = frame.ptr().ptr::<E820MemoryRegion>().unwrap().as_mut();
-        slice::from_raw_parts_mut(ptr, usize::try_from(memory_map_entry_count).unwrap())
-    };
-    memory_map.copy_from_slice(e820_memory_map);
-    frame_allocator.memory_map = memory_map;
+    let max_phys_addr = memory_map.max_phys_addr();
+    let mut frame_allocator = BiosFrameAllocator::new(memory_map).unwrap();
 
     // We identity-map all memory, so the offset between physical and virtual addresses is 0
     let phys_offset = VirtualAddr::new(0);
@@ -122,7 +110,7 @@ fn bootloader_main(
 
     // identity-map remaining physical memory (first gigabyte is already identity-mapped)
     let start_frame = PhysicalFrame::<Page2Mb>::containing(PhysicalAddr::new(Page1Gb));
-    let end_frame = PhysicalFrame::<Page2Mb>::containing(PhysicalAddr::new(max_phys_addr - 1));
+    let end_frame = PhysicalFrame::<Page2Mb>::containing(max_phys_addr - 1u64);
     for frame in FrameRange::new(start_frame, end_frame) {
         bootloader_page_table
             .id_map(frame, Flags::PRESENT | Flags::RW, &mut frame_allocator)
@@ -178,10 +166,7 @@ fn bootloader_main(
 }
 
 /// Creates page table abstraction types for both the bootloader and kernel page tables.
-fn create_page_tables(
-    // frame_allocator: &mut impl FrameAllocator<Page4Kb>,
-    frame_allocator: &mut LegacyFrameAllocator,
-) -> bootloader::binary::PageTables {
+fn create_page_tables(frame_allocator: &mut impl FrameAllocator<Page4Kb>) -> PageTables {
     // We identity-mapped all memory, so the offset between physical and virtual addresses is 0
     let phys_offset = VirtualAddr::new(0);
 
@@ -201,7 +186,7 @@ fn create_page_tables(
     };
     log::info!("Kernel page table at: {:?}", &kernel_level_4_frame);
 
-    bootloader::binary::PageTables {
+    PageTables {
         bootloader: bootloader_page_table,
         kernel: kernel_page_table,
         kernel_level_4_frame,

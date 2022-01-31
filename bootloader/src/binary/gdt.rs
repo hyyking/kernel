@@ -1,12 +1,23 @@
-use libx64::address::VirtualAddr;
-use libx64::descriptors::{CodeSegmentDescriptor, DataSegmentDescriptor, GdtNull};
-use libx64::gdt::{lgdt, GlobalDescriptorTable};
-use libx64::paging::frame::PhysicalFrame;
-use libx64::paging::Page4Kb;
-use libx64::segments::{set_cs, set_ds, set_es, set_ss};
+use libx64::{
+    address::VirtualAddr,
+    descriptors::{CodeSegmentDescriptor, DataSegmentDescriptor, GdtNull},
+    gdt::{lgdt, GlobalDescriptorTable},
+    paging::{
+        entry::Flags,
+        frame::{FrameAllocator, FrameError},
+        page::{PageMapper, TlbFlush},
+        Page4Kb,
+    },
+    segments::{set_cs, set_ds, set_es, set_ss},
+};
 
-pub fn create_and_load(frame: PhysicalFrame<Page4Kb>) {
-    let phys_addr = frame.ptr();
+#[cold]
+pub fn create_and_load(
+    kernel_mapper: &mut impl PageMapper<Page4Kb>,
+    alloc: &mut impl FrameAllocator<Page4Kb>,
+) -> Result<(), FrameError> {
+    let gdt_frame = alloc.alloc()?;
+    let phys_addr = gdt_frame.ptr();
 
     info!("Creating GDT at {:?}", phys_addr);
     let virt_addr = VirtualAddr::new(phys_addr.as_u64()); // utilize identity mapping
@@ -30,4 +41,8 @@ pub fn create_and_load(frame: PhysicalFrame<Page4Kb>) {
     set_ds(data_selector);
     set_es(data_selector);
     set_ss(data_selector);
+
+    kernel_mapper
+        .id_map(gdt_frame, Flags::PRESENT, alloc)
+        .map(TlbFlush::flush)
 }

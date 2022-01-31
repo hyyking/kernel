@@ -3,7 +3,9 @@ use crate::{
     paging::{
         entry::Flags,
         frame::{FrameAllocator, FrameError, PhysicalFrame},
-        invlpg, Page1Gb, Page2Mb, Page4Kb, PageCheck, PageSize,
+        invlpg,
+        table::Translation,
+        Page1Gb, Page2Mb, Page4Kb, PageCheck, PageSize,
     },
 };
 
@@ -26,6 +28,10 @@ where
 
     #[inline]
     pub fn ignore(self) {}
+}
+
+pub trait PageTranslator {
+    fn try_translate(&mut self, addr: VirtualAddr) -> Result<Translation, FrameError>;
 }
 
 pub trait PageMapper<const N: u64>
@@ -60,6 +66,33 @@ where
     {
         let page = Page::containing(VirtualAddr::new(frame.ptr().as_u64()));
         self.map(page, frame, flags, allocator)
+    }
+}
+
+impl<const N: u64, M> PageMapper<N> for &mut M
+where
+    PageCheck<N>: PageSize,
+    M: PageMapper<N>,
+{
+    fn map<A>(
+        &mut self,
+        page: Page<N>,
+        frame: PhysicalFrame<N>,
+        flags: Flags,
+        allocator: &mut A,
+    ) -> Result<TlbFlush<N>, FrameError>
+    where
+        A: FrameAllocator<Page4Kb>,
+    {
+        <M as PageMapper<N>>::map(self, page, frame, flags, allocator)
+    }
+
+    fn update_flags(&mut self, page: Page<N>, flags: Flags) -> Result<TlbFlush<N>, FrameError> {
+        <M as PageMapper<N>>::update_flags(self, page, flags)
+    }
+
+    fn unmap(&mut self, page: Page<N>) -> Result<TlbFlush<N>, FrameError> {
+        <M as PageMapper<N>>::unmap(self, page)
     }
 }
 

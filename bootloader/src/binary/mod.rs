@@ -6,7 +6,7 @@ use core::{
 };
 
 use crate::{
-    binary::legacy_memory_region::LegacyFrameAllocator,
+    binary::memory::BiosFrameAllocator,
     boot_info::{BootInfo, FrameBuffer, FrameBufferInfo, MemoryRegion, TlsTemplate},
 };
 
@@ -24,14 +24,15 @@ use libx64::paging::{
 use page_mapper::OffsetMapper;
 
 mod gdt;
-/// Provides a frame allocator based on a BIOS or UEFI memory map.
-pub mod legacy_memory_region;
+
 /// Provides a type to keep track of used entries in a level 4 page table.
 pub mod level_4_entries;
+
 /// Implements a loader for the kernel ELF binary.
 pub mod load_kernel;
-/// E380 Memory region
-pub mod memory_descriptor;
+
+/// E380 Memory region and BIOS FrameAllocator
+pub mod memory;
 
 // Contains the parsed configuration table from the kernel's Cargo.toml.
 //
@@ -62,9 +63,10 @@ pub struct SystemInfo {
 /// This function is a convenience function that first calls [`set_up_mappings`], then
 /// [`create_boot_info`], and finally [`switch_to_kernel`]. The given arguments are passed
 /// directly to these functions, so see their docs for more info.
+#[cold]
 pub fn load_and_switch_to_kernel(
     kernel_bytes: &[u8],
-    mut frame_allocator: LegacyFrameAllocator,
+    mut frame_allocator: BiosFrameAllocator,
     mut page_tables: PageTables,
     system_info: SystemInfo,
 ) -> ! {
@@ -100,9 +102,10 @@ pub fn load_and_switch_to_kernel(
 ///
 /// This function reacts to unexpected situations (e.g. invalid kernel ELF file) with a panic, so
 /// errors are not recoverable.
+#[cold]
 pub fn set_up_mappings(
     kernel_bytes: &[u8],
-    frame_allocator: &mut LegacyFrameAllocator,
+    frame_allocator: &mut BiosFrameAllocator,
     page_tables: &mut PageTables,
     framebuffer_addr: PhysicalAddr,
     framebuffer_size: usize,
@@ -159,13 +162,7 @@ pub fn set_up_mappings(
     }
 
     trace!("Mapping GDT");
-    // create, load, and identity-map GDT (required for working `iretq`)
-    let gdt_frame = frame_allocator.alloc()?;
-    gdt::create_and_load(gdt_frame);
-
-    kernel_page_table
-        .id_map(gdt_frame, Flags::PRESENT, frame_allocator)
-        .map(TlbFlush::flush)?;
+    gdt::create_and_load(kernel_page_table, frame_allocator).unwrap();
 
     // map framebuffer
     let framebuffer_virt_addr = if CONFIG.map_framebuffer {
@@ -194,7 +191,7 @@ pub fn set_up_mappings(
 
         let offset = VirtualAddr::new(0x100000000);
 
-        let max_phys = frame_allocator.max_phys_addr();
+        let max_phys = frame_allocator.memory_map().max_phys_addr();
 
         let start_frame = PhysicalFrame::<Page2Mb>::containing(PhysicalAddr::new(0));
         let end_frame = PhysicalFrame::<Page2Mb>::containing(max_phys - 1u64);
@@ -243,8 +240,9 @@ pub struct Mappings {
 /// address space at the same address. This makes it possible to return a Rust
 /// reference that is valid in both address spaces. The necessary physical frames
 /// are taken from the given `frame_allocator`.
+#[cold]
 pub fn create_boot_info(
-    mut frame_allocator: LegacyFrameAllocator,
+    mut frame_allocator: BiosFrameAllocator,
     page_tables: &mut PageTables,
     mappings: &mut Mappings,
     system_info: SystemInfo,
@@ -293,7 +291,9 @@ pub fn create_boot_info(
     info!("Creating Memory Map");
 
     // build memory map
-    let memory_regions = frame_allocator.construct_memory_map(memory_regions);
+    let memory_regions =
+        memory::construct_memory_map(frame_allocator.into_memory_map(), memory_regions)
+            .expect("unable to construct memory_map");
 
     info!("Creating bootinfo");
 
@@ -321,6 +321,7 @@ pub fn create_boot_info(
 }
 
 /// Switches to the kernel address space and jumps to the kernel entry point.
+#[cold]
 pub fn switch_to_kernel(
     page_tables: PageTables,
     mappings: Mappings,
@@ -363,6 +364,7 @@ pub struct PageTables {
 }
 
 /// Performs the actual context switch.
+#[cold]
 unsafe fn context_switch(addresses: Addresses) -> ! {
     unsafe {
         asm!(
@@ -387,6 +389,7 @@ struct Addresses {
     boot_info: &'static mut crate::boot_info::BootInfo,
 }
 
+#[inline]
 fn boot_info_location(used_entries: &mut UsedLevel4Entries) -> VirtualAddr {
     CONFIG
         .boot_info_address
@@ -394,6 +397,7 @@ fn boot_info_location(used_entries: &mut UsedLevel4Entries) -> VirtualAddr {
         .unwrap_or_else(|| used_entries.get_free_address())
 }
 
+#[inline]
 fn frame_buffer_location(used_entries: &mut UsedLevel4Entries) -> VirtualAddr {
     CONFIG
         .framebuffer_address
@@ -401,6 +405,7 @@ fn frame_buffer_location(used_entries: &mut UsedLevel4Entries) -> VirtualAddr {
         .unwrap_or_else(|| used_entries.get_free_address())
 }
 
+#[inline]
 fn kernel_stack_start_location(used_entries: &mut UsedLevel4Entries) -> VirtualAddr {
     CONFIG
         .kernel_stack_address
@@ -408,11 +413,13 @@ fn kernel_stack_start_location(used_entries: &mut UsedLevel4Entries) -> VirtualA
         .unwrap_or_else(|| used_entries.get_free_address())
 }
 
+#[inline]
 fn enable_nxe_bit() {
     use libx64::control::{efer, set_efer, Efer};
     set_efer(efer() | Efer::NXE);
 }
 
+#[inline]
 fn enable_write_protect_bit() {
     use libx64::control::{cr0, set_cr0, CR0};
     set_cr0(cr0() | CR0::WP);

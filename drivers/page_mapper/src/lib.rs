@@ -11,7 +11,7 @@ use libx64::{
     paging::{
         entry::Flags,
         frame::{FrameAllocator, FrameError, PhysicalFrame},
-        page::{Page, PageMapper, TlbFlush},
+        page::{Page, PageMapper, PageTranslator, TlbFlush},
         table::{Level1, Level2, Level3, Level4, PageTable, Translation},
         Page1Gb, Page2Mb, Page4Kb, PinTableMut,
     },
@@ -44,11 +44,10 @@ impl OffsetMapper {
     pub fn level4(&mut self) -> PinTableMut<'_, Level4> {
         self.walker.level4()
     }
+}
 
-    /// # Errors
-    ///
-    /// Errors if we hit a missing page
-    pub fn try_translate(&mut self, addr: VirtualAddr) -> Result<Translation, FrameError> {
+impl PageTranslator for OffsetMapper {
+    fn try_translate(&mut self, addr: VirtualAddr) -> Result<Translation, FrameError> {
         self.walker.try_translate_addr(addr)
     }
 }

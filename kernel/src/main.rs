@@ -19,7 +19,7 @@ extern crate alloc;
 
 use core::panic::PanicInfo;
 
-use libx64::address::VirtualAddr;
+use libx64::{address::VirtualAddr, paging::page::PageTranslator};
 
 use crate::mem::{context::MemoryLayout, pagealloc::BootInfoFrameAllocator};
 
