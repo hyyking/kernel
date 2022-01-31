@@ -38,23 +38,9 @@ pub struct BootInfo {
     pub memory_regions: MemoryRegions,
     /// Information about the framebuffer for screen output if available.
     pub framebuffer: Optional<FrameBuffer>,
-    /// The virtual address at which the mapping of the physical memory starts.
-    ///
-    /// Physical addresses can be converted to virtual addresses by adding this offset to them.
-    ///
-    /// The mapping of the physical memory allows to access arbitrary physical frames. Accessing
-    /// frames that are also mapped at other virtual addresses can easily break memory safety and
-    /// cause undefined behavior. Only frames reported as `USABLE` by the memory map in the `BootInfo`
-    /// can be safely accessed.
-    ///
-    /// Only available if the `map-physical-memory` config option is enabled.
-    pub physical_memory_offset: Optional<u64>,
-    /// The virtual address of the recursively mapped level 4 page table.
-    ///
-    /// Only available if the `map-page-table-recursively` config option is enabled.
-    pub recursive_index: Optional<u16>,
-    /// The address of the `RSDP` data structure, which can be use to find the ACPI tables.
-    ///
+
+    /// PhysicalMemoryOffset
+    pub physical_memory_offset: u64,
     /// This field is `None` if no `RSDP` was found (for BIOS) or reported (for UEFI).
     pub rsdp_addr: Optional<u64>,
     /// The thread local storage (TLS) template of the kernel executable, if present.

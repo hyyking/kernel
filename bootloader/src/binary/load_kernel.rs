@@ -1,17 +1,20 @@
 use core::mem::align_of;
 
-use crate::{
-    binary::{level_4_entries::UsedLevel4Entries, PAGE_SIZE},
-    boot_info::TlsTemplate,
-};
-use x86_64::{
-    align_up,
-    structures::paging::{
-        mapper::{MappedFrame, MapperAllSizes, TranslateResult},
-        FrameAllocator, Page, PageSize, PageTableFlags as Flags, PhysFrame, Size4KiB, Translate,
+use crate::{binary::level_4_entries::UsedLevel4Entries, boot_info::TlsTemplate};
+
+use libx64::{
+    address::{PhysicalAddr, VirtualAddr},
+    paging::{
+        entry::Flags,
+        frame::{FrameAllocator, FrameError, FrameRange, PhysicalFrame},
+        page::{Page, PageMapper, PageRange, TlbFlush},
+        table::Translation,
+        Page4Kb,
     },
-    PhysAddr, VirtAddr,
 };
+
+use page_mapper::OffsetMapper;
+
 use xmas_elf::{
     dynamic, header,
     program::{self, ProgramHeader, SegmentData, Type},
@@ -20,33 +23,32 @@ use xmas_elf::{
 };
 
 /// Used by [`Inner::make_mut`] and [`Inner::clean_copied_flag`].
-const COPIED: Flags = Flags::BIT_9;
+const COPIED: Flags = Flags::AVL1;
 
-struct Loader<'a, M, F> {
+struct Loader<'a, F> {
     elf_file: ElfFile<'a>,
-    inner: Inner<'a, M, F>,
+    inner: Inner<'a, F>,
 }
 
-struct Inner<'a, M, F> {
-    kernel_offset: PhysAddr,
+struct Inner<'a, F> {
+    kernel_offset: PhysicalAddr,
     virtual_address_offset: u64,
-    page_table: &'a mut M,
+    page_table: &'a mut OffsetMapper,
     frame_allocator: &'a mut F,
 }
 
-impl<'a, M, F> Loader<'a, M, F>
+impl<'a, F> Loader<'a, F>
 where
-    M: MapperAllSizes + Translate,
-    F: FrameAllocator<Size4KiB>,
+    F: FrameAllocator<Page4Kb>,
 {
     fn new(
         bytes: &'a [u8],
-        page_table: &'a mut M,
+        page_table: &'a mut OffsetMapper,
         frame_allocator: &'a mut F,
     ) -> Result<Self, &'static str> {
-        log::info!("Elf file loaded at {:#p}", bytes);
-        let kernel_offset = PhysAddr::new(&bytes[0] as *const u8 as u64);
-        if !kernel_offset.is_aligned(PAGE_SIZE) {
+        info!("Elf file loaded at {:#p}", bytes);
+        let kernel_offset = PhysicalAddr::new(&bytes[0] as *const u8 as u64);
+        if !kernel_offset.is_aligned(Page4Kb) {
             return Err("Loaded kernel ELF file is not sufficiently aligned");
         }
 
@@ -84,7 +86,10 @@ where
         let mut tls_template = None;
         for program_header in self.elf_file.program_iter() {
             match program_header.get_type()? {
-                Type::Load => self.inner.handle_load_segment(program_header)?,
+                Type::Load => self
+                    .inner
+                    .handle_load_segment(program_header)
+                    .map_err(|_| "load failed")?,
                 Type::Tls => {
                     if tls_template.is_none() {
                         tls_template = Some(self.inner.handle_tls_segment(program_header)?);
@@ -117,8 +122,8 @@ where
         Ok(tls_template)
     }
 
-    fn entry_point(&self) -> VirtAddr {
-        VirtAddr::new(self.elf_file.header.pt2.entry_point() + self.inner.virtual_address_offset)
+    fn entry_point(&self) -> VirtualAddr {
+        VirtualAddr::new(self.elf_file.header.pt2.entry_point() + self.inner.virtual_address_offset)
     }
 
     fn used_level_4_entries(&self) -> UsedLevel4Entries {
@@ -129,41 +134,37 @@ where
     }
 }
 
-impl<'a, M, F> Inner<'a, M, F>
+impl<'a, F> Inner<'a, F>
 where
-    M: MapperAllSizes + Translate,
-    F: FrameAllocator<Size4KiB>,
+    F: FrameAllocator<Page4Kb>,
 {
-    fn handle_load_segment(&mut self, segment: ProgramHeader) -> Result<(), &'static str> {
-        log::info!("Handling Segment: {:#x?}", segment);
+    fn handle_load_segment(&mut self, segment: ProgramHeader) -> Result<(), FrameError> {
+        info!("Handling Segment: {:#x?}", segment);
 
         let phys_start_addr = self.kernel_offset + segment.offset();
-        let start_frame: PhysFrame = PhysFrame::containing_address(phys_start_addr);
-        let end_frame: PhysFrame =
-            PhysFrame::containing_address(phys_start_addr + segment.file_size() - 1u64);
+        let start_frame = PhysicalFrame::<Page4Kb>::containing(phys_start_addr);
+        let end_frame =
+            PhysicalFrame::<Page4Kb>::containing(phys_start_addr + segment.file_size() - 1u64);
 
-        let virt_start_addr = VirtAddr::new(segment.virtual_addr()) + self.virtual_address_offset;
-        let start_page: Page = Page::containing_address(virt_start_addr);
+        let virt_start_addr =
+            VirtualAddr::new(segment.virtual_addr()) + self.virtual_address_offset;
+        let start_page = Page::<Page4Kb>::containing(virt_start_addr);
 
         let mut segment_flags = Flags::PRESENT;
         if !segment.flags().is_execute() {
-            segment_flags |= Flags::NO_EXECUTE;
+            segment_flags |= Flags::NX;
         }
         if segment.flags().is_write() {
-            segment_flags |= Flags::WRITABLE;
+            segment_flags |= Flags::RW;
         }
 
         // map all frames of the segment at the desired virtual address
-        for frame in PhysFrame::range_inclusive(start_frame, end_frame) {
-            let offset = frame - start_frame;
-            let page = start_page + offset;
-            let flusher = unsafe {
-                self.page_table
-                    .map_to(page, frame, segment_flags, self.frame_allocator)
-                    .map_err(|_err| "map_to failed")?
-            };
-            // we operate on an inactive page table, so there's no need to flush anything
-            flusher.ignore();
+        for frame in FrameRange::new(start_frame, end_frame) {
+            let offset = frame.ptr().as_u64() - start_frame.ptr().as_u64();
+            let page = Page::containing(VirtualAddr::new(start_page.ptr().as_u64() + offset));
+            self.page_table
+                .map(page, frame, segment_flags, self.frame_allocator)
+                .map(TlbFlush::ignore)?
         }
 
         // Handle .bss section (mem_size > file_size)
@@ -179,10 +180,11 @@ where
         &mut self,
         segment: &ProgramHeader,
         segment_flags: Flags,
-    ) -> Result<(), &'static str> {
-        log::info!("Mapping bss section");
+    ) -> Result<(), FrameError> {
+        info!("Mapping bss section");
 
-        let virt_start_addr = VirtAddr::new(segment.virtual_addr()) + self.virtual_address_offset;
+        let virt_start_addr =
+            VirtualAddr::new(segment.virtual_addr()) + self.virtual_address_offset;
         let mem_size = segment.mem_size();
         let file_size = segment.file_size();
 
@@ -191,8 +193,8 @@ where
         let zero_end = virt_start_addr + mem_size;
 
         // a type alias that helps in efficiently clearing a page
-        type PageArray = [u64; Size4KiB::SIZE as usize / 8];
-        const ZERO_ARRAY: PageArray = [0; Size4KiB::SIZE as usize / 8];
+        type PageArray = [u64; Page4Kb as usize / 8];
+        const ZERO_ARRAY: PageArray = [0; Page4Kb as usize / 8];
 
         // In some cases, `zero_start` might not be page-aligned. This requires some
         // special treatment because we can't safely zero a frame of the original file.
@@ -227,36 +229,35 @@ where
             // the remaining part of the frame since the frame is no longer shared with other
             // segments now.
 
-            let last_page = Page::containing_address(virt_start_addr + file_size - 1u64);
-            let new_frame = unsafe { self.make_mut(last_page) };
-            let new_bytes_ptr = new_frame.start_address().as_u64() as *mut u8;
+            let last_page = Page::<Page4Kb>::containing(virt_start_addr + file_size - 1u64);
+            let new_frame = unsafe { self.make_mut(last_page)? };
+            let new_bytes_ptr = new_frame.ptr().as_u64() as *mut u8;
             unsafe {
                 core::ptr::write_bytes(
                     new_bytes_ptr.add(data_bytes_before_zero as usize),
                     0,
-                    (Size4KiB::SIZE - data_bytes_before_zero) as usize,
+                    (Page4Kb - data_bytes_before_zero) as usize,
                 );
             }
         }
 
         // map additional frames for `.bss` memory that is not present in source file
-        let start_page: Page =
-            Page::containing_address(VirtAddr::new(align_up(zero_start.as_u64(), Size4KiB::SIZE)));
-        let end_page = Page::containing_address(zero_end);
-        for page in Page::range_inclusive(start_page, end_page) {
+        let start_page =
+            Page::<Page4Kb>::containing(VirtualAddr::new(zero_start.as_u64()).align_up(Page4Kb));
+        let end_page = Page::<Page4Kb>::containing(zero_end);
+        for page in PageRange::new(start_page, end_page) {
             // allocate a new unused frame
-            let frame = self.frame_allocator.allocate_frame().unwrap();
+            let frame = self.frame_allocator.alloc().unwrap();
 
             // zero frame, utilizing identity-mapping
-            let frame_ptr = frame.start_address().as_u64() as *mut PageArray;
+            let frame_ptr = frame.ptr().as_u64() as *mut PageArray;
             unsafe { frame_ptr.write(ZERO_ARRAY) };
 
             // map frame
-            let flusher = unsafe {
-                self.page_table
-                    .map_to(page, frame, segment_flags, self.frame_allocator)
-                    .map_err(|_err| "Failed to map new frame for bss memory")?
-            };
+            let flusher = self
+                .page_table
+                .map(page, frame, segment_flags, self.frame_allocator)?;
+
             // we operate on an inactive page table, so we don't need to flush our changes
             flusher.ignore();
         }
@@ -280,81 +281,70 @@ where
     ///  
     /// ## Panics
     /// Panics if the page is not mapped in `self.page_table`.
-    unsafe fn make_mut(&mut self, page: Page) -> PhysFrame {
-        let (frame, flags) = match self.page_table.translate(page.start_address()) {
-            TranslateResult::Mapped {
-                frame,
+    unsafe fn make_mut(
+        &mut self,
+        page: Page<Page4Kb>,
+    ) -> Result<PhysicalFrame<Page4Kb>, FrameError> {
+        let (frame, flags) = match self.page_table.try_translate(page.ptr()) {
+            Ok(Translation {
+                addr,
                 offset: _,
                 flags,
-            } => (frame, flags),
-            TranslateResult::NotMapped => panic!("{:?} is not mapped", page),
-            TranslateResult::InvalidFrameAddress(_) => unreachable!(),
-        };
-        let frame = if let MappedFrame::Size4KiB(frame) = frame {
-            frame
-        } else {
-            // We only map 4k pages.
-            unreachable!()
+            }) => (PhysicalFrame::<Page4Kb>::containing(addr), flags),
+            Err(_) => panic!("translation failed"),
         };
 
         if flags.contains(COPIED) {
             // The frame was already copied, we are free to modify it.
-            return frame;
+            return Ok(frame);
         }
 
         // Allocate a new frame and copy the memory, utilizing that both frames are identity mapped.
-        let new_frame = self.frame_allocator.allocate_frame().unwrap();
-        let frame_ptr = frame.start_address().as_u64() as *const u8;
-        let new_frame_ptr = new_frame.start_address().as_u64() as *mut u8;
+        let new_frame = self.frame_allocator.alloc().unwrap();
+        let frame_ptr = frame.ptr().as_u64() as *const u8;
+        let new_frame_ptr = new_frame.ptr().as_u64() as *mut u8;
         unsafe {
-            core::ptr::copy_nonoverlapping(frame_ptr, new_frame_ptr, Size4KiB::SIZE as usize);
+            core::ptr::copy_nonoverlapping(frame_ptr, new_frame_ptr, Page4Kb as usize);
         }
 
         // Replace the underlying frame and update the flags.
-        self.page_table.unmap(page).unwrap().1.ignore();
-        let new_flags = flags | COPIED;
-        unsafe {
-            self.page_table
-                .map_to(page, new_frame, new_flags, self.frame_allocator)
-                .unwrap()
-                .ignore();
-        }
+        self.page_table.unmap(page).map(TlbFlush::ignore)?;
 
-        new_frame
+        let new_flags = flags | COPIED;
+        self.page_table
+            .map(page, new_frame, new_flags, self.frame_allocator)
+            .map(TlbFlush::ignore)?;
+
+        Ok(new_frame)
     }
 
     /// Cleans up the custom flags set by [`Inner::make_mut`].
-    fn remove_copied_flags(&mut self, elf_file: &ElfFile) -> Result<(), &'static str> {
+    fn remove_copied_flags(&mut self, elf_file: &ElfFile) -> Result<(), FrameError> {
         for program_header in elf_file.program_iter() {
-            if let Type::Load = program_header.get_type()? {
+            if let Type::Load = program_header.get_type().unwrap() {
                 let start = self.virtual_address_offset + program_header.virtual_addr();
                 let end = start + program_header.mem_size();
-                let start = VirtAddr::new(start);
-                let end = VirtAddr::new(end);
-                let start_page = Page::containing_address(start);
-                let end_page = Page::containing_address(end - 1u64);
-                for page in Page::<Size4KiB>::range_inclusive(start_page, end_page) {
+                let start = VirtualAddr::new(start);
+                let end = VirtualAddr::new(end);
+                let start_page = Page::<Page4Kb>::containing(start);
+                let end_page = Page::<Page4Kb>::containing(end - 1u64);
+                for page in PageRange::new(start_page, end_page) {
                     // Translate the page and get the flags.
-                    let res = self.page_table.translate(page.start_address());
+                    let res = self.page_table.try_translate(page.ptr());
                     let flags = match res {
-                        TranslateResult::Mapped {
-                            frame: _,
+                        Ok(Translation {
+                            addr: _,
                             offset: _,
                             flags,
-                        } => flags,
-                        TranslateResult::NotMapped | TranslateResult::InvalidFrameAddress(_) => {
-                            unreachable!("has the elf file not been mapped correctly?")
-                        }
+                        }) => flags,
+                        Err(_) => panic!("ERROR"),
                     };
 
                     if flags.contains(COPIED) {
                         // Remove the flag.
-                        unsafe {
-                            self.page_table
-                                .update_flags(page, flags & !COPIED)
-                                .unwrap()
-                                .ignore();
-                        }
+                        self.page_table
+                            .update_flags(page, flags & !COPIED)
+                            .map(TlbFlush::ignore)?;
                     }
                 }
             }
@@ -471,12 +461,12 @@ where
                         return Err("destination of relocation is not aligned");
                     }
 
-                    let virt_addr = VirtAddr::from_ptr(ptr);
-                    let page = Page::containing_address(virt_addr);
-                    let offset_in_page = virt_addr - page.start_address();
+                    let virt_addr = VirtualAddr::from_ptr(ptr);
+                    let page = Page::<Page4Kb>::containing(virt_addr);
+                    let offset_in_page = virt_addr.as_u64() - page.ptr().as_u64();
 
-                    let new_frame = unsafe { self.make_mut(page) };
-                    let phys_addr = new_frame.start_address() + offset_in_page;
+                    let new_frame = unsafe { self.make_mut(page).map_err(|_| "frame error")? };
+                    let phys_addr = new_frame.ptr() + offset_in_page;
                     let addr = phys_addr.as_u64() as *mut u64;
                     unsafe {
                         addr.write(value);
@@ -511,9 +501,9 @@ fn check_is_in_load(elf_file: &ElfFile, virt_offset: u64) -> Result<(), &'static
 /// and a structure describing which level 4 page table entries are in use.  
 pub fn load_kernel(
     bytes: &[u8],
-    page_table: &mut (impl MapperAllSizes + Translate),
-    frame_allocator: &mut impl FrameAllocator<Size4KiB>,
-) -> Result<(VirtAddr, Option<TlsTemplate>, UsedLevel4Entries), &'static str> {
+    page_table: &mut OffsetMapper,
+    frame_allocator: &mut impl FrameAllocator<Page4Kb>,
+) -> Result<(VirtualAddr, Option<TlsTemplate>, UsedLevel4Entries), &'static str> {
     let mut loader = Loader::new(bytes, page_table, frame_allocator)?;
     let tls_template = loader.load_segments()?;
     let used_entries = loader.used_level_4_entries();

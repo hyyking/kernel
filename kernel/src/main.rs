@@ -33,12 +33,21 @@ pub mod mem;
 bootloader::entry_point!(kmain);
 
 pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
+    debug!("[OK] kernel loaded");
     qemu_logger::init().expect("unable to initialize logger");
-
-    // kprintln!("[OK] kernel loaded");
 
     init::kinit();
     libx64::sti();
+
+    let pmo = VirtualAddr::new(bi.physical_memory_offset);
+    debug!("{:?}", pmo);
+    let mut context = crate::mem::context::MemoryContext::new(
+        MemoryLayout::init(&bi.memory_regions).expect("memory layout"),
+        page_mapper::OffsetMapper::new(pmo),
+        BootInfoFrameAllocator::init(&bi.memory_regions),
+    );
+
+    dbg!(context.mapper.try_translate(pmo));
 
     let f = bi.framebuffer.as_mut().unwrap();
     let info = f.info();
@@ -50,33 +59,23 @@ pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
     fb.draw(&framebuffer::Character::new('l', 80, 50)).unwrap();
     fb.draw(&framebuffer::Character::new('o', 90, 50)).unwrap();
 
+    mem::galloc::GLOBAL_ALLOC
+        .map(&mut context.mapper, &mut context.alloc)
+        .expect("unable to map the global allocator");
     /*
-    {
-        let pmo = VirtualAddr::new(bi.physical_memory_offset.into_option().unwrap());
+        {
+            let mut scheduler = Scheduler::new();
 
-        let mut context = crate::mem::context::MemoryContext::new(
-            MemoryLayout::init(&bi.memory_regions).expect("memory layout"),
-            page_mapper::OffsetMapper::new(pmo),
-            BootInfoFrameAllocator::init(&bi.memory_regions),
-        );
+            scheduler.spawn(async {
+                use kcore::futures::stream::StreamExt;
 
-        mem::galloc::GLOBAL_ALLOC
-            .map(&mut context.mapper, &mut context.alloc)
-            .expect("unable to map the global allocator");
-
-          let mut scheduler = Scheduler::new();
-
-        scheduler.spawn(async {
-            use kcore::futures::stream::StreamExt;
-
-            while let Some(key) = (&mut *crate::init::KEYBOARD.lock()).next().await {
-                kprint!("{}", key)
-            }
-        });
-        scheduler.run();
-    }
+                while let Some(key) = (&mut *crate::init::KEYBOARD.lock()).next().await {
+                    // kprint!("{}", key)
+                }
+            });
+            scheduler.run();
+        }
     */
-
     #[cfg(test)]
     test_main();
 

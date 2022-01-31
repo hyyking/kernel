@@ -4,20 +4,36 @@ use crate::{
     address::{PhysicalAddr, VirtualAddr},
     control::CR3,
     paging::{
-        entry::{MappedLevel2Page, MappedLevel3Page, PageEntry},
+        entry::{Flags, MappedLevel2Page, MappedLevel3Page, PageEntry},
         frame::{FrameError, FrameTranslator, PhysicalFrame},
-        Page1Gb, Page2Mb, Page4Kb, PinEntryMut,
+        Page1Gb, Page2Mb, Page4Kb, PinEntryMut, PinTableMut,
     },
 };
 
-use super::PinTableMut;
-
-#[derive(Debug)]
 #[repr(C, align(4096))]
 pub struct PageTable<LEVEL: PageLevel> {
     entries: [PageEntry<LEVEL>; 512],
     _m: core::marker::PhantomData<LEVEL>,
     _p: core::marker::PhantomPinned,
+}
+
+impl<LEVEL: PageLevel> core::fmt::Debug for PageTable<LEVEL> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "PageTable<Level{}>:\n", LEVEL::VALUE)?;
+        for (i, entry) in self.entries.iter().enumerate() {
+            if entry.is_present() {
+                write!(f, "{}: {:#?}\n", i, entry)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct Translation {
+    pub flags: Flags,
+    pub addr: PhysicalAddr,
+    pub offset: u16,
 }
 
 impl<LEVEL: PageLevel> PageTable<LEVEL> {
@@ -34,12 +50,26 @@ impl<LEVEL: PageLevel> PageTable<LEVEL> {
     ) -> PinEntryMut<'_, LEVEL> {
         unsafe { self.map_unchecked_mut(|page| page[idx].assume_init_mut()) }
     }
+
+    /// Get a reference to the page table's entries.
+    pub fn entries(&self) -> &[PageEntry<LEVEL>; 512] {
+        &self.entries
+    }
 }
 
 impl PageTable<Level4> {
     #[allow(clippy::needless_pass_by_value)]
     pub fn new<'a>(cr: CR3, translator: &dyn FrameTranslator<(), Page4Kb>) -> Pin<&'a mut Self> {
         unsafe { translator.translate_frame(cr.frame()) }
+    }
+
+    pub const fn new_zero() -> Self {
+        const ZERO: PageEntry<Level4> = PageEntry::zero();
+        Self {
+            entries: [ZERO; 512],
+            _m: core::marker::PhantomData,
+            _p: core::marker::PhantomPinned,
+        }
     }
 
     /// # Errors
@@ -55,7 +85,7 @@ impl PageTable<Level4> {
 
 pub enum Level3Walk<'a> {
     PageTable(PinTableMut<'a, Level2>),
-    HugePage(PhysicalFrame<Page1Gb>),
+    HugePage(PhysicalFrame<Page1Gb>, Flags),
 }
 impl PageTable<Level3> {
     /// # Errors
@@ -65,11 +95,12 @@ impl PageTable<Level3> {
         cr: Pin<&'a PageEntry<Level3>>,
         translator: &dyn FrameTranslator<Level3, Page4Kb>,
     ) -> Result<Level3Walk<'b>, FrameError> {
+        let flags = cr.get_flags();
         match cr.frame()? {
             MappedLevel3Page::Page4Kb(frame) => unsafe {
                 Ok(Level3Walk::PageTable(translator.translate_frame(frame)))
             },
-            MappedLevel3Page::Page1Gb(frame) => Ok(Level3Walk::HugePage(frame)),
+            MappedLevel3Page::Page1Gb(frame) => Ok(Level3Walk::HugePage(frame, flags)),
         }
     }
 
@@ -80,14 +111,19 @@ impl PageTable<Level3> {
     pub unsafe fn translate_with_frame(
         c: PhysicalFrame<Page1Gb>,
         virt: VirtualAddr,
-    ) -> PhysicalAddr {
-        c.ptr() + u64::from(virt.page_offset())
+        flags: Flags,
+    ) -> Translation {
+        Translation {
+            flags,
+            addr: c.ptr() + u64::from(virt.page_offset()),
+            offset: virt.page_offset(),
+        }
     }
 }
 
 pub enum Level2Walk<'a> {
     PageTable(PinTableMut<'a, Level1>),
-    HugePage(PhysicalFrame<Page2Mb>),
+    HugePage(PhysicalFrame<Page2Mb>, Flags),
 }
 
 impl PageTable<Level2> {
@@ -98,11 +134,12 @@ impl PageTable<Level2> {
         cr: Pin<&'a PageEntry<Level2>>,
         translator: &dyn FrameTranslator<Level2, Page4Kb>,
     ) -> Result<Level2Walk<'b>, FrameError> {
+        let flags = cr.get_flags();
         match cr.frame()? {
             MappedLevel2Page::Page4Kb(frame) => unsafe {
                 Ok(Level2Walk::PageTable(translator.translate_frame(frame)))
             },
-            MappedLevel2Page::Page2Mb(frame) => Ok(Level2Walk::HugePage(frame)),
+            MappedLevel2Page::Page2Mb(frame) => Ok(Level2Walk::HugePage(frame, flags)),
         }
     }
 
@@ -113,8 +150,13 @@ impl PageTable<Level2> {
     pub unsafe fn translate_with_frame(
         c: PhysicalFrame<Page2Mb>,
         virt: VirtualAddr,
-    ) -> PhysicalAddr {
-        c.ptr() + u64::from(virt.page_offset())
+        flags: Flags,
+    ) -> Translation {
+        Translation {
+            flags,
+            addr: c.ptr() + u64::from(virt.page_offset()),
+            offset: virt.page_offset(),
+        }
     }
 }
 
@@ -126,10 +168,15 @@ impl PageTable<Level1> {
         self: Pin<&Self>,
         idx: PageTableIndex<Level1>,
         virt: VirtualAddr,
-    ) -> Result<PhysicalAddr, FrameError> {
-        self.index_pin(idx)
-            .frame()
-            .map(|f| f.ptr() + u64::from(virt.page_offset()))
+    ) -> Result<Translation, FrameError> {
+        let a = self.index_pin(idx);
+        let flags = a.get_flags();
+
+        a.frame().map(|f| Translation {
+            flags,
+            offset: virt.page_offset(),
+            addr: f.ptr() + u64::from(virt.page_offset()),
+        })
     }
 }
 
@@ -159,6 +206,11 @@ impl<T> PageTableIndex<T> {
             idx: (value as usize) % 512,
             _m: core::marker::PhantomData,
         }
+    }
+
+    /// Get the page table index's idx.
+    pub fn value(&self) -> usize {
+        self.idx
     }
 }
 
@@ -192,7 +244,7 @@ impl<'a> Level2Walk<'a> {
     pub fn try_into_table(self) -> Result<PinTableMut<'a, Level1>, FrameError> {
         match self {
             Level2Walk::PageTable(table) => Ok(table),
-            Level2Walk::HugePage(_) => Err(FrameError::UnexpectedHugePage),
+            Level2Walk::HugePage(_, _) => Err(FrameError::UnexpectedHugePage),
         }
     }
 }
@@ -204,7 +256,7 @@ impl<'a> Level3Walk<'a> {
     pub fn try_into_table(self) -> Result<PinTableMut<'a, Level2>, FrameError> {
         match self {
             Level3Walk::PageTable(table) => Ok(table),
-            Level3Walk::HugePage(_) => Err(FrameError::UnexpectedHugePage),
+            Level3Walk::HugePage(_, _) => Err(FrameError::UnexpectedHugePage),
         }
     }
 }

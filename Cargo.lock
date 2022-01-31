@@ -59,6 +59,7 @@ dependencies = [
  "libx64",
  "llvm-tools",
  "log",
+ "page_mapper",
  "proc-macro2",
  "qemu_logger",
  "quote",
@@ -66,7 +67,6 @@ dependencies = [
  "serde",
  "thiserror",
  "toml",
- "x86_64",
  "xmas-elf",
 ]
 

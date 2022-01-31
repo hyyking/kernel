@@ -121,6 +121,12 @@ impl PhysicalAddr {
 
     #[inline]
     #[must_use]
+    pub const fn is_aligned(self, align: u64) -> bool {
+        self.align_down(align).as_u64() == self.as_u64()
+    }
+
+    #[inline]
+    #[must_use]
     pub const fn align_down(self, align: u64) -> Self {
         Self(align_down(self.0, align))
     }
@@ -159,6 +165,7 @@ const fn align_up(addr: u64, align: u64) -> u64 {
 impl core::ops::Add<u64> for VirtualAddr {
     type Output = VirtualAddr;
 
+    #[track_caller]
     fn add(self, rhs: u64) -> Self::Output {
         Self(self.0 + rhs)
     }
@@ -167,6 +174,7 @@ impl core::ops::Add<u64> for VirtualAddr {
 impl core::ops::Sub<u64> for VirtualAddr {
     type Output = VirtualAddr;
 
+    #[track_caller]
     fn sub(self, rhs: u64) -> Self::Output {
         Self(self.0 - rhs)
     }
@@ -175,6 +183,7 @@ impl core::ops::Sub<u64> for VirtualAddr {
 impl core::ops::Add<u64> for PhysicalAddr {
     type Output = PhysicalAddr;
 
+    #[track_caller]
     fn add(self, rhs: u64) -> Self::Output {
         Self(self.0 + rhs)
     }
@@ -183,6 +192,7 @@ impl core::ops::Add<u64> for PhysicalAddr {
 impl core::ops::Sub<u64> for PhysicalAddr {
     type Output = PhysicalAddr;
 
+    #[track_caller]
     fn sub(self, rhs: u64) -> Self::Output {
         Self(self.0 - rhs)
     }
@@ -191,6 +201,7 @@ impl core::ops::Sub<u64> for PhysicalAddr {
 impl core::ops::Add<usize> for VirtualAddr {
     type Output = VirtualAddr;
 
+    #[track_caller]
     fn add(self, rhs: usize) -> Self::Output {
         Self(self.0 + rhs as u64)
     }
@@ -199,6 +210,7 @@ impl core::ops::Add<usize> for VirtualAddr {
 impl core::ops::Sub<usize> for VirtualAddr {
     type Output = VirtualAddr;
 
+    #[track_caller]
     fn sub(self, rhs: usize) -> Self::Output {
         Self(self.0 - rhs as u64)
     }
@@ -207,6 +219,7 @@ impl core::ops::Sub<usize> for VirtualAddr {
 impl core::ops::Add<usize> for PhysicalAddr {
     type Output = PhysicalAddr;
 
+    #[track_caller]
     fn add(self, rhs: usize) -> Self::Output {
         Self(self.0 + rhs as u64)
     }
@@ -215,6 +228,7 @@ impl core::ops::Add<usize> for PhysicalAddr {
 impl core::ops::Sub<usize> for PhysicalAddr {
     type Output = PhysicalAddr;
 
+    #[track_caller]
     fn sub(self, rhs: usize) -> Self::Output {
         Self(self.0 - rhs as u64)
     }

@@ -7,13 +7,13 @@ pub mod offset;
 pub mod walker;
 
 use libx64::{
-    address::{PhysicalAddr, VirtualAddr},
+    address::VirtualAddr,
     paging::{
         entry::Flags,
         frame::{FrameAllocator, FrameError, PhysicalFrame},
-        page::{Page, PageMapper},
-        table::{Level1, Level2, Level3, Level4},
-        Page1Gb, Page2Mb, Page4Kb,
+        page::{Page, PageMapper, TlbFlush},
+        table::{Level1, Level2, Level3, Level4, PageTable, Translation},
+        Page1Gb, Page2Mb, Page4Kb, PinTableMut,
     },
 };
 
@@ -34,38 +34,60 @@ impl OffsetMapper {
         }
     }
 
+    #[must_use]
+    pub unsafe fn from_p4(level4: &mut PageTable<Level4>, offset: VirtualAddr) -> Self {
+        Self {
+            walker: PageWalker::new_with_level4(OffsetWalker::new(offset), level4),
+        }
+    }
+
+    pub fn level4(&mut self) -> PinTableMut<'_, Level4> {
+        self.walker.level4()
+    }
+
     /// # Errors
     ///
     /// Errors if we hit a missing page
-    pub fn try_translate_addr(&mut self, addr: VirtualAddr) -> Result<PhysicalAddr, FrameError> {
+    pub fn try_translate(&mut self, addr: VirtualAddr) -> Result<Translation, FrameError> {
         self.walker.try_translate_addr(addr)
     }
 }
 
-impl<A> PageMapper<A, Page4Kb> for OffsetMapper
-where
-    A: FrameAllocator<Page4Kb>,
-{
-    fn map(
+impl PageMapper<Page4Kb> for OffsetMapper {
+    #[must_use]
+    fn map<A>(
         &mut self,
         page: Page<Page4Kb>,
         frame: PhysicalFrame<Page4Kb>,
         flags: Flags,
         allocator: &mut A,
-    ) -> Result<(), FrameError> {
+    ) -> Result<TlbFlush<Page4Kb>, FrameError>
+    where
+        A: FrameAllocator<Page4Kb>,
+    {
         let addr = page.ptr();
+        let pflags = Flags::PRESENT | Flags::RW | Flags::US;
         trace!("Mapping page: {:?} -> {:?}", &page, &frame);
 
         let level_4 = self.walker.level4();
 
         let entry = level_4.index_pin_mut(addr.page_table_index(Level4));
-        let level_3 = self.walker.walk_level3(entry).or_create(flags, allocator)?;
+        let level_3 = self
+            .walker
+            .walk_level3(entry)
+            .or_create(pflags, allocator)?;
 
         let entry = level_3.index_pin_mut(addr.page_table_index(Level3));
-        let level_2 = self.walker.walk_level2(entry).or_create(flags, allocator)?;
+        let level_2 = self
+            .walker
+            .walk_level2(entry)
+            .or_create(pflags, allocator)?;
 
         let entry = level_2.index_pin_mut(addr.page_table_index(Level2));
-        let level_1 = self.walker.walk_level1(entry).or_create(flags, allocator)?;
+        let level_1 = self
+            .walker
+            .walk_level1(entry)
+            .or_create(pflags, allocator)?;
 
         // SAFETY: we are the sole owner of this page and the entry will be valid
         unsafe {
@@ -74,31 +96,98 @@ where
             entry.as_mut().set_frame(frame);
         }
 
-        Ok(())
+        Ok(TlbFlush::new(page))
+    }
+
+    fn update_flags(
+        &mut self,
+        page: Page<Page4Kb>,
+        flags: Flags,
+    ) -> Result<TlbFlush<Page4Kb>, FrameError> {
+        let addr = page.ptr();
+
+        let level_4 = self.walker.level4();
+
+        let entry = level_4.index_pin_mut(addr.page_table_index(Level4));
+        let level_3 = self.walker.walk_level3(entry)?;
+
+        let entry = level_3.index_pin_mut(addr.page_table_index(Level3));
+        let level_2 = self.walker.walk_level2(entry)?;
+
+        let entry = level_2
+            .try_into_table()?
+            .index_pin_mut(addr.page_table_index(Level2));
+        let level_1 = self.walker.walk_level1(entry)?;
+
+        // SAFETY: we are the sole owner of this page and the entry will be valid
+        unsafe {
+            let mut entry = level_1
+                .try_into_table()?
+                .index_pin_mut(addr.page_table_index(Level1));
+            entry.as_mut().set_flags(flags);
+        }
+
+        Ok(TlbFlush::new(page))
+    }
+
+    fn unmap(&mut self, page: Page<Page4Kb>) -> Result<TlbFlush<Page4Kb>, FrameError> {
+        let addr = page.ptr();
+
+        let level_4 = self.walker.level4();
+
+        let entry = level_4.index_pin_mut(addr.page_table_index(Level4));
+        let level_3 = self.walker.walk_level3(entry)?;
+
+        let entry = level_3.index_pin_mut(addr.page_table_index(Level3));
+        let level_2 = self.walker.walk_level2(entry)?;
+
+        let entry = level_2
+            .try_into_table()?
+            .index_pin_mut(addr.page_table_index(Level2));
+        let level_1 = self.walker.walk_level1(entry)?;
+
+        // SAFETY: we are the sole owner of this page and the entry will be valid
+        unsafe {
+            let mut entry = level_1
+                .try_into_table()?
+                .index_pin_mut(addr.page_table_index(Level1));
+            entry.as_mut().clear();
+        }
+
+        Ok(TlbFlush::new(page))
     }
 }
 
-impl<A> PageMapper<A, Page2Mb> for OffsetMapper
-where
-    A: FrameAllocator<Page4Kb> + FrameAllocator<Page2Mb>,
-{
-    fn map(
+impl PageMapper<Page2Mb> for OffsetMapper {
+    #[must_use]
+    fn map<A>(
         &mut self,
         page: Page<Page2Mb>,
         frame: PhysicalFrame<Page2Mb>,
         flags: Flags,
         allocator: &mut A,
-    ) -> Result<(), FrameError> {
+    ) -> Result<TlbFlush<Page2Mb>, FrameError>
+    where
+        A: FrameAllocator<Page4Kb>,
+    {
         let addr = page.ptr();
+        let pflags = Flags::PRESENT | Flags::RW | Flags::US;
+
         trace!("Mapping page: {:?} -> {:?}", &page, &frame);
 
         let level_4 = self.walker.level4();
 
         let entry = level_4.index_pin_mut(addr.page_table_index(Level4));
-        let level_3 = self.walker.walk_level3(entry).or_create(flags, allocator)?;
+        let level_3 = self
+            .walker
+            .walk_level3(entry)
+            .or_create(pflags, allocator)?;
 
         let entry = level_3.index_pin_mut(addr.page_table_index(Level3));
-        let level_2 = self.walker.walk_level2(entry).or_create(flags, allocator)?;
+        let level_2 = self
+            .walker
+            .walk_level2(entry)
+            .or_create(pflags, allocator)?;
 
         // SAFETY: we are the sole owner of this page and the entry will be valid
         unsafe {
@@ -107,28 +196,81 @@ where
             entry.as_mut().set_frame(frame);
         }
 
-        Ok(())
+        Ok(TlbFlush::new(page))
+    }
+
+    fn update_flags(
+        &mut self,
+        page: Page<Page2Mb>,
+        flags: Flags,
+    ) -> Result<TlbFlush<Page2Mb>, FrameError> {
+        let addr = page.ptr();
+
+        let level_4 = self.walker.level4();
+
+        let entry = level_4.index_pin_mut(addr.page_table_index(Level4));
+        let level_3 = self.walker.walk_level3(entry)?;
+
+        let entry = level_3.index_pin_mut(addr.page_table_index(Level3));
+        let level_2 = self.walker.walk_level2(entry)?;
+
+        // SAFETY: we are the sole owner of this page and the entry will be valid
+        unsafe {
+            let mut entry = level_2
+                .try_into_table()?
+                .index_pin_mut(addr.page_table_index(Level2));
+            entry.as_mut().set_flags(flags | Flags::HUGE);
+        }
+
+        Ok(TlbFlush::new(page))
+    }
+
+    fn unmap(&mut self, page: Page<Page2Mb>) -> Result<TlbFlush<Page2Mb>, FrameError> {
+        let addr = page.ptr();
+
+        let level_4 = self.walker.level4();
+
+        let entry = level_4.index_pin_mut(addr.page_table_index(Level4));
+        let level_3 = self.walker.walk_level3(entry)?;
+
+        let entry = level_3.index_pin_mut(addr.page_table_index(Level3));
+        let level_2 = self.walker.walk_level2(entry)?;
+
+        // SAFETY: we are the sole owner of this page and the entry will be valid
+        unsafe {
+            let mut entry = level_2
+                .try_into_table()?
+                .index_pin_mut(addr.page_table_index(Level2));
+            entry.as_mut().clear();
+        }
+
+        Ok(TlbFlush::new(page))
     }
 }
 
-impl<A> PageMapper<A, Page1Gb> for OffsetMapper
-where
-    A: FrameAllocator<Page4Kb> + FrameAllocator<Page1Gb>,
-{
-    fn map(
+impl PageMapper<Page1Gb> for OffsetMapper {
+    #[must_use]
+    fn map<A>(
         &mut self,
         page: Page<Page1Gb>,
         frame: PhysicalFrame<Page1Gb>,
         flags: Flags,
         allocator: &mut A,
-    ) -> Result<(), FrameError> {
+    ) -> Result<TlbFlush<Page1Gb>, FrameError>
+    where
+        A: FrameAllocator<Page4Kb>,
+    {
         let addr = page.ptr();
+        let pflags = Flags::PRESENT | Flags::RW | Flags::US;
         trace!("Mapping page: {:?} -> {:?}", &page, &frame);
 
         let level_4 = self.walker.level4();
 
         let entry = level_4.index_pin_mut(addr.page_table_index(Level4));
-        let level_3 = self.walker.walk_level3(entry).or_create(flags, allocator)?;
+        let level_3 = self
+            .walker
+            .walk_level3(entry)
+            .or_create(pflags, allocator)?;
 
         // SAFETY: we are the sole owner of this page and the entry will be valid
         unsafe {
@@ -136,6 +278,42 @@ where
             entry.as_mut().set_flags(flags | Flags::HUGE);
             entry.as_mut().set_frame(frame);
         }
-        Ok(())
+        Ok(TlbFlush::new(page))
+    }
+
+    fn update_flags(
+        &mut self,
+        page: Page<Page1Gb>,
+        flags: Flags,
+    ) -> Result<TlbFlush<Page1Gb>, FrameError> {
+        let addr = page.ptr();
+
+        let level_4 = self.walker.level4();
+
+        let entry = level_4.index_pin_mut(addr.page_table_index(Level4));
+        let level_3 = self.walker.walk_level3(entry)?;
+
+        // SAFETY: we are the sole owner of this page and the entry will be valid
+        unsafe {
+            let mut entry = level_3.index_pin_mut(addr.page_table_index(Level3));
+            entry.as_mut().set_flags(flags | Flags::HUGE);
+        }
+        Ok(TlbFlush::new(page))
+    }
+
+    fn unmap(&mut self, page: Page<Page1Gb>) -> Result<TlbFlush<Page1Gb>, FrameError> {
+        let addr = page.ptr();
+
+        let level_4 = self.walker.level4();
+
+        let entry = level_4.index_pin_mut(addr.page_table_index(Level4));
+        let level_3 = self.walker.walk_level3(entry)?;
+
+        // SAFETY: we are the sole owner of this page and the entry will be valid
+        unsafe {
+            let mut entry = level_3.index_pin_mut(addr.page_table_index(Level3));
+            entry.as_mut().clear();
+        }
+        Ok(TlbFlush::new(page))
     }
 }

@@ -4,8 +4,8 @@ use libx64::{
     address::VirtualAddr,
     paging::{
         frame::{FrameTranslator, PhysicalFrame},
-        table::{Level2, Level3, Level4, PageLevel, PageTable},
-        NotGiantPageSize, NotHugePageSize, PageCheck, PageSize,
+        table::{Level2, Level3, Level4, PageLevel},
+        NotGiantPageSize, NotHugePageSize, PageCheck, PageSize, PinTableMut,
     },
 };
 
@@ -40,7 +40,7 @@ where
     unsafe fn translate_frame<'a>(
         &self,
         frame: PhysicalFrame<N>,
-    ) -> Pin<&'a mut PageTable<<() as PageLevel>::Next>> {
+    ) -> PinTableMut<'a, <() as PageLevel>::Next> {
         Pin::new_unchecked(self.translate(frame).cast().as_mut())
     }
 }
@@ -53,7 +53,7 @@ where
     unsafe fn translate_frame<'a>(
         &self,
         frame: PhysicalFrame<N>,
-    ) -> Pin<&'a mut PageTable<<Level4 as PageLevel>::Next>> {
+    ) -> PinTableMut<'a, <Level4 as PageLevel>::Next> {
         Pin::new_unchecked(self.translate(frame).cast().as_mut())
     }
 }
@@ -66,7 +66,7 @@ where
     unsafe fn translate_frame<'a>(
         &self,
         frame: PhysicalFrame<N>,
-    ) -> Pin<&'a mut PageTable<<Level3 as PageLevel>::Next>> {
+    ) -> PinTableMut<'a, <Level3 as PageLevel>::Next> {
         Pin::new_unchecked(self.translate(frame).cast().as_mut())
     }
 }
@@ -79,7 +79,7 @@ where
     unsafe fn translate_frame<'a>(
         &self,
         frame: PhysicalFrame<N>,
-    ) -> Pin<&'a mut PageTable<<Level2 as PageLevel>::Next>> {
+    ) -> PinTableMut<'a, <Level2 as PageLevel>::Next> {
         Pin::new_unchecked(self.translate(frame).cast().as_mut())
     }
 }

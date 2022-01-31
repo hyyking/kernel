@@ -1,5 +1,7 @@
+use core::ptr::NonNull;
+
 use libx64::{
-    address::{PhysicalAddr, VirtualAddr},
+    address::VirtualAddr,
     paging::{
         entry::Flags,
         frame::{FrameAllocator, FrameError, FrameTranslator},
@@ -7,6 +9,8 @@ use libx64::{
         NotGiantPageSize, NotHugePageSize, Page4Kb, PageCheck, PageSize, PinEntryMut, PinTableMut,
     },
 };
+
+use crate::Translation;
 
 pub(crate) trait WalkResultExt<'a, T, L, const N: u64>
 where
@@ -40,15 +44,23 @@ pub(crate) struct PageWalker<T, const N: u64>
 where
     PageCheck<N>: PageSize,
 {
+    level4: NonNull<PageTable<Level4>>,
     translator: T,
 }
 
 impl<T, const N: u64> PageWalker<T, N>
 where
     PageCheck<N>: PageSize,
+    T: FrameTranslator<(), Page4Kb>,
 {
-    pub(crate) const fn new(translator: T) -> Self {
-        Self { translator }
+    pub(crate) fn new(translator: T) -> Self {
+        let level4 = PageTable::new(libx64::control::cr3(), &translator);
+        unsafe { Self::new_with_level4(translator, level4.get_unchecked_mut()) }
+    }
+
+    pub(crate) fn new_with_level4(translator: T, level4: &mut PageTable<Level4>) -> Self {
+        let level4 = NonNull::from(level4);
+        Self { translator, level4 }
     }
 }
 
@@ -60,14 +72,14 @@ where
         + FrameTranslator<Level3, Page4Kb>
         + FrameTranslator<Level2, Page4Kb>,
 {
-    pub(crate) fn level4(&self) -> PinTableMut<'_, Level4> {
-        PageTable::new(libx64::control::cr3(), &self.translator)
+    pub(crate) fn level4<'a>(&self) -> PinTableMut<'a, Level4> {
+        unsafe { core::pin::Pin::new_unchecked(&mut *self.level4.as_ptr()) }
     }
 
     pub(crate) fn try_translate_addr(
         &mut self,
         addr: VirtualAddr,
-    ) -> Result<PhysicalAddr, FrameError> {
+    ) -> Result<Translation, FrameError> {
         let page = self.level4();
 
         let entry = page.index_pin_mut(addr.page_table_index(Level4));
@@ -78,8 +90,10 @@ where
             Level3Walk::PageTable(table) => table,
 
             // SAFETY: we hold a valid huge page frame
-            Level3Walk::HugePage(frame) => unsafe {
-                return Ok(PageTable::<Level3>::translate_with_frame(frame, addr));
+            Level3Walk::HugePage(frame, flags) => unsafe {
+                return Ok(PageTable::<Level3>::translate_with_frame(
+                    frame, addr, flags,
+                ));
             },
         };
 
@@ -88,8 +102,10 @@ where
         let page = match self.walk_level1(entry)? {
             Level2Walk::PageTable(table) => table,
             // SAFETY: we hold a valid huge page frame
-            Level2Walk::HugePage(frame) => unsafe {
-                return Ok(PageTable::<Level2>::translate_with_frame(frame, addr));
+            Level2Walk::HugePage(frame, flags) => unsafe {
+                return Ok(PageTable::<Level2>::translate_with_frame(
+                    frame, addr, flags,
+                ));
             },
         };
 

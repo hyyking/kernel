@@ -43,10 +43,6 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             * framebuffer.info().bytes_per_pixel
     );
 
-    // check defaults for optional features
-    assert_eq!(boot_info.physical_memory_offset.into_option(), None);
-    assert_eq!(boot_info.recursive_index.into_option(), None);
-
     // check rsdp_addr
     let rsdp = boot_info.rsdp_addr.into_option().unwrap();
     assert!(rsdp > 0x000E0000);

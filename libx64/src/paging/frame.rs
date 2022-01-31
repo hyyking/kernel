@@ -85,7 +85,7 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         let addr = self.start.align_down(N) + (self.at * N);
-        if addr.as_u64() > (self.end.as_u64() - 1) {
+        if addr.as_u64() > self.end.as_u64() {
             return None;
         }
         self.at += 1;
@@ -99,7 +99,17 @@ where
 {
     #[inline]
     #[must_use]
-    pub const fn new(start: PhysicalAddr, end: PhysicalAddr) -> Self {
+    pub const fn new(start: PhysicalFrame<N>, end: PhysicalFrame<N>) -> Self {
+        Self {
+            start: start.ptr(),
+            end: end.ptr(),
+            at: 0,
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn new_addr(start: PhysicalAddr, end: PhysicalAddr) -> Self {
         Self { start, end, at: 0 }
     }
 
@@ -145,5 +155,19 @@ where
             .field("size", &N)
             .field("ptr", &format_args!("{:#x}", &self.addr.as_u64()))
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::paging::Page4Kb;
+
+    use super::*;
+    #[test]
+    fn inclusive() {
+        assert_eq!(
+            FrameRange::<Page4Kb>::new(PhysicalAddr::new(0), PhysicalAddr::new(Page4Kb)).count(),
+            2
+        )
     }
 }

@@ -96,6 +96,5 @@ pub fn invlpg(addr: VirtualAddr) {
 /// Invalidate the TLB completely by reloading the CR3 register.
 #[inline]
 pub fn invalidate_tlb() {
-    let cr3 = crate::control::cr3();
-    crate::control::set_cr3(cr3);
+    crate::control::set_cr3(crate::control::cr3());
 }

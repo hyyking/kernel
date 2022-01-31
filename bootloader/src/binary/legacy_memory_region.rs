@@ -1,69 +1,69 @@
+use crate::binary::memory_descriptor::E820MemoryRegion;
 use crate::boot_info::{MemoryRegion, MemoryRegionKind};
+
 use core::mem::MaybeUninit;
-use x86_64::{
-    structures::paging::{FrameAllocator, PhysFrame, Size4KiB},
-    PhysAddr,
+
+use libx64::{
+    address::PhysicalAddr,
+    paging::{
+        frame::{FrameAllocator, FrameError, PhysicalFrame},
+        Page4Kb,
+    },
 };
 
-/// Abstraction trait for a memory region returned by the UEFI or BIOS firmware.
-pub trait LegacyMemoryRegion: Copy + core::fmt::Debug {
-    /// Returns the physical start address of the region.
-    fn start(&self) -> PhysAddr;
-    /// Returns the size of the region in bytes.
-    fn len(&self) -> u64;
-    /// Returns the type of the region, e.g. whether it is usable or reserved.
-    fn kind(&self) -> MemoryRegionKind;
-}
-
 /// A physical frame allocator based on a BIOS or UEFI provided memory map.
-pub struct LegacyFrameAllocator<I, D> {
-    original: I,
-    memory_map: I,
-    current_descriptor: Option<D>,
-    next_frame: PhysFrame,
+pub struct LegacyFrameAllocator {
+    /// E820MemoryMap
+    pub memory_map: &'static [E820MemoryRegion],
+    idx: usize,
+    current_descriptor: Option<E820MemoryRegion>,
+    next_frame: PhysicalFrame<Page4Kb>,
 }
 
-impl<I, D> LegacyFrameAllocator<I, D>
-where
-    I: ExactSizeIterator<Item = D> + Clone,
-    I::Item: LegacyMemoryRegion,
-{
+impl LegacyFrameAllocator {
     /// Creates a new frame allocator based on the given legacy memory regions.
     ///
     /// Skips the frame at physical address zero to avoid potential problems. For example
     /// identity-mapping the frame at address zero is not valid in Rust, because Rust's `core`
     /// library assumes that references can never point to virtual address `0`.  
-    pub fn new(memory_map: I) -> Self {
+    pub fn new(memory_map: &'static [E820MemoryRegion]) -> Self {
         // skip frame 0 because the rust core library does not see 0 as a valid address
-        let start_frame = PhysFrame::containing_address(PhysAddr::new(0x1000));
+        let start_frame = PhysicalFrame::<Page4Kb>::containing(PhysicalAddr::new(0x1000));
+
         Self::new_starting_at(start_frame, memory_map)
     }
 
     /// Creates a new frame allocator based on the given legacy memory regions. Skips any frames
     /// before the given `frame`.
-    pub fn new_starting_at(frame: PhysFrame, memory_map: I) -> Self {
+    pub fn new_starting_at(
+        frame: PhysicalFrame<Page4Kb>,
+        memory_map: &'static [E820MemoryRegion],
+    ) -> Self {
         Self {
-            original: memory_map.clone(),
             memory_map,
+            idx: 0,
             current_descriptor: None,
             next_frame: frame,
         }
     }
 
-    fn allocate_frame_from_descriptor(&mut self, descriptor: D) -> Option<PhysFrame> {
+    fn allocate_frame_from_descriptor(
+        &mut self,
+        descriptor: E820MemoryRegion,
+    ) -> Option<PhysicalFrame<Page4Kb>> {
         let start_addr = descriptor.start();
-        let start_frame = PhysFrame::containing_address(start_addr);
+        let start_frame = PhysicalFrame::<Page4Kb>::containing(start_addr);
         let end_addr = start_addr + descriptor.len();
-        let end_frame = PhysFrame::containing_address(end_addr - 1u64);
+        let end_frame = PhysicalFrame::<Page4Kb>::containing(end_addr - 1u64);
 
         // increase self.next_frame to start_frame if smaller
-        if self.next_frame < start_frame {
+        if self.next_frame.ptr().as_u64() < start_frame.ptr().as_u64() {
             self.next_frame = start_frame;
         }
 
-        if self.next_frame < end_frame {
+        if self.next_frame.ptr().as_u64() < end_frame.ptr().as_u64() {
             let ret = self.next_frame;
-            self.next_frame += 1;
+            self.next_frame = PhysicalFrame::containing(self.next_frame.ptr() + Page4Kb);
             Some(ret)
         } else {
             None
@@ -75,17 +75,18 @@ where
     /// The function always returns the same value, i.e. the length doesn't
     /// change after calls to `allocate_frame`.
     pub fn len(&self) -> usize {
-        self.original.len()
+        self.memory_map.len()
     }
 
     /// Returns the largest detected physical memory address.
     ///
     /// Useful for creating a mapping for all physical memory.
-    pub fn max_phys_addr(&self) -> PhysAddr {
-        self.original
-            .clone()
-            .map(|r| r.start() + r.len())
+    pub fn max_phys_addr(&self) -> PhysicalAddr {
+        self.memory_map
+            .iter()
+            .map(|r| (r.start() + r.len()).as_u64())
             .max()
+            .map(PhysicalAddr::new)
             .unwrap()
     }
 
@@ -101,15 +102,15 @@ where
     ) -> &mut [MemoryRegion] {
         let mut next_index = 0;
 
-        for descriptor in self.original {
+        for descriptor in self.memory_map {
             let mut start = descriptor.start();
             let end = start + descriptor.len();
-            let next_free = self.next_frame.start_address();
+            let next_free = self.next_frame.ptr();
             let kind = match descriptor.kind() {
                 MemoryRegionKind::Usable => {
-                    if end <= next_free {
+                    if end.as_u64() <= next_free.as_u64() {
                         MemoryRegionKind::Bootloader
-                    } else if descriptor.start() >= next_free {
+                    } else if descriptor.start().as_u64() >= next_free.as_u64() {
                         MemoryRegionKind::Usable
                     } else {
                         // part of the region is used -> add it separately
@@ -156,34 +157,36 @@ where
         *next_index += 1;
         Ok(())
     }
+
+    fn next_entry(&mut self) -> Option<E820MemoryRegion> {
+        let ret = self.memory_map.get(self.idx);
+        if ret.is_some() {
+            self.idx += 1;
+        }
+        ret.copied()
+    }
 }
 
-unsafe impl<I, D> FrameAllocator<Size4KiB> for LegacyFrameAllocator<I, D>
-where
-    I: ExactSizeIterator<Item = D> + Clone,
-    I::Item: LegacyMemoryRegion,
-{
-    fn allocate_frame(&mut self) -> Option<PhysFrame<Size4KiB>> {
+impl FrameAllocator<Page4Kb> for LegacyFrameAllocator {
+    fn alloc(&mut self) -> Result<PhysicalFrame<Page4Kb>, FrameError> {
         if let Some(current_descriptor) = self.current_descriptor {
             match self.allocate_frame_from_descriptor(current_descriptor) {
-                Some(frame) => return Some(frame),
-                None => {
-                    self.current_descriptor = None;
-                }
+                Some(frame) => return Ok(frame),
+                None => self.current_descriptor = None,
             }
         }
 
         // find next suitable descriptor
-        while let Some(descriptor) = self.memory_map.next() {
+        while let Some(descriptor) = self.next_entry() {
             if descriptor.kind() != MemoryRegionKind::Usable {
                 continue;
             }
             if let Some(frame) = self.allocate_frame_from_descriptor(descriptor) {
                 self.current_descriptor = Some(descriptor);
-                return Some(frame);
+                return Ok(frame);
             }
         }
 
-        None
+        Err(FrameError::Alloc)
     }
 }

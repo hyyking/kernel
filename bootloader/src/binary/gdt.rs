@@ -8,7 +8,7 @@ use libx64::segments::{set_cs, set_ds, set_es, set_ss};
 pub fn create_and_load(frame: PhysicalFrame<Page4Kb>) {
     let phys_addr = frame.ptr();
 
-    log::info!("Creating GDT at {:?}", phys_addr);
+    info!("Creating GDT at {:?}", phys_addr);
     let virt_addr = VirtualAddr::new(phys_addr.as_u64()); // utilize identity mapping
 
     let ptr: core::ptr::NonNull<GlobalDescriptorTable> = virt_addr.ptr().unwrap();

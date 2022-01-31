@@ -35,7 +35,10 @@ impl BootInfoFrameAllocator {
             .iter()
             .filter(|r| r.kind == MemoryRegionKind::Usable)
             .map(|r| {
-                FrameRange::<Page4Kb>::new(PhysicalAddr::new(r.start), PhysicalAddr::new(r.end))
+                FrameRange::<Page4Kb>::new_addr(
+                    PhysicalAddr::new(r.start),
+                    PhysicalAddr::new(r.end),
+                )
             });
 
         let page = iter.next().unwrap().start().as_u64();

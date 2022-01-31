@@ -4,7 +4,7 @@ use crate::{
     address::PhysicalAddr,
     paging::{
         frame::{FrameError, PhysicalFrame},
-        table::{Level1, Level2, Level3, Level4},
+        table::{Level1, Level2, Level3, Level4, PageLevel},
         NotGiantPageSize, NotHugePageSize, Page1Gb, Page2Mb, Page4Kb, PageCheck,
     },
 };
@@ -149,9 +149,10 @@ pub struct PageEntry<L> {
     _pin: core::marker::PhantomPinned,
 }
 
-impl<L> core::fmt::Debug for PageEntry<L> {
+impl<L: PageLevel> core::fmt::Debug for PageEntry<L> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("PageEntry")
+            .field("level", &L::VALUE)
             .field("flags", &Flags::from_bits_truncate(self.raw.as_u64()))
             .field("address", &self.address())
             .finish()
@@ -159,6 +160,14 @@ impl<L> core::fmt::Debug for PageEntry<L> {
 }
 
 impl<L> PageEntry<L> {
+    pub const fn zero() -> Self {
+        Self {
+            raw: RawPageEntry::zero(),
+            _level: core::marker::PhantomData,
+            _pin: core::marker::PhantomPinned,
+        }
+    }
+
     #[inline]
     #[must_use]
     pub const fn address(&self) -> PhysicalAddr {

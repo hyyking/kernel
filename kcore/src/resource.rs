@@ -4,7 +4,7 @@ use core::ptr::NonNull;
 use libx64::paging::{
     entry::Flags,
     frame::{FrameAllocator, FrameError},
-    page::{PageMapper, PageRange},
+    page::{PageMapper, PageRange, TlbFlush},
     Page4Kb, PageCheck, PageSize,
 };
 
@@ -43,15 +43,17 @@ where
     pub fn map<M, A>(&self, mapper: &mut M, alloc: &mut A) -> Result<(), FrameError>
     where
         A: FrameAllocator<N> + FrameAllocator<Page4Kb>,
-        M: PageMapper<A, N>,
+        M: PageMapper<N>,
     {
         self.page.clone().try_for_each(|page| {
-            mapper.map(
-                page,
-                alloc.alloc()?,
-                Flags::PRESENT | Flags::RW | Flags::US,
-                alloc,
-            )
+            mapper
+                .map(
+                    page,
+                    alloc.alloc()?,
+                    Flags::PRESENT | Flags::RW | Flags::US,
+                    alloc,
+                )
+                .map(TlbFlush::ignore)
         })?;
 
         libx64::paging::invalidate_tlb();

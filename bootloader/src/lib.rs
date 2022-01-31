@@ -70,6 +70,10 @@ for all possible configuration options.
 #![deny(unsafe_op_in_unsafe_fn)]
 #![warn(missing_docs)]
 
+#[cfg(feature = "binary")]
+#[macro_use]
+extern crate log;
+
 pub use crate::boot_info::BootInfo;
 pub use crate::config::Config;
 
