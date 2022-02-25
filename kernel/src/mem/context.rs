@@ -16,7 +16,7 @@ pub struct MemoryContext<M, A> {
 
 pub struct MemoryLayout {
     memory_map: &'static MemoryRegions,
-    pub low: FrameRange<Page4Kb>,
+    pub usable: FrameRange<Page4Kb>,
 }
 
 impl<M, A> MemoryContext<M, A> {
@@ -48,13 +48,12 @@ impl MemoryLayout {
                     PhysicalAddr::new(r.end),
                 )
             });
-        dbg!(&memory_map[..]);
-        let low = iter.next().ok_or(MemoryInitError)?;
+        let usable = iter.next().ok_or(MemoryInitError)?;
         while let Some((i, range)) = (&mut iter).enumerate().next() {
             error!("[{}] unmapped memory at: {:?}", i, range)
         }
 
-        Ok(Self { low, memory_map })
+        Ok(Self { usable, memory_map })
     }
 
     pub fn memory_map(&self) -> *const MemoryRegions {
@@ -66,7 +65,7 @@ impl core::fmt::Debug for MemoryLayout {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("MemoryLayout")
             .field("memory_map", &"[ ... ]")
-            .field("low", &self.low)
+            .field("usable", &self.usable)
             .finish()
     }
 }

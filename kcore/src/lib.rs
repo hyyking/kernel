@@ -9,8 +9,6 @@ extern crate std;
 extern crate alloc;
 #[cfg(feature = "alloc")]
 pub mod kalloc;
-#[cfg(feature = "alloc")]
-pub mod resource;
 
 #[allow(unused_imports)]
 #[macro_use]

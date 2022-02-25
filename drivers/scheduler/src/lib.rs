@@ -1,17 +1,20 @@
 #![no_std]
+#![feature(allocator_api)]
 
 extern crate alloc;
 
 #[macro_use]
 extern crate log;
 
-use alloc::{boxed::Box, collections::VecDeque};
+use alloc::{alloc::Allocator, boxed::Box, collections::VecDeque, sync::Arc};
 
 use core::{
     future::Future,
     pin::Pin,
     task::{Context, Poll, RawWaker, RawWakerVTable, Waker},
 };
+
+use kcore::kalloc::SharedAllocator;
 
 struct SchedulerWaker;
 
@@ -24,7 +27,7 @@ impl SchedulerWaker {
     }
 
     unsafe fn clone(_ptr: *const ()) -> RawWaker {
-        todo!()
+        RawWaker::new(core::ptr::null(), Self::VTABLE)
     }
 
     unsafe fn wake(_ptr: *const ()) {
@@ -38,11 +41,19 @@ impl SchedulerWaker {
     unsafe fn drop(_ptr: *const ()) {}
 }
 
-pub struct Task {
-    task: Pin<Box<dyn Future<Output = ()>>>,
+type TaskFuture = dyn Future<Output = ()>;
+
+pub struct Task<A>
+where
+    A: Allocator,
+{
+    task: Pin<Box<TaskFuture, SharedAllocator<A>>>,
 }
 
-impl Future for Task {
+impl<A> Future for Task<A>
+where
+    A: Allocator + 'static,
+{
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -50,26 +61,33 @@ impl Future for Task {
     }
 }
 
-impl Task {
-    pub fn new<F>(task: F) -> Self
+impl<A> Task<A>
+where
+    A: Allocator + 'static,
+{
+    pub fn new<F>(task: F, alloc: SharedAllocator<A>) -> Self
     where
         F: Future<Output = ()> + 'static,
     {
         Self {
-            task: Box::pin(task),
+            task: Box::pin_in(task, alloc),
         }
     }
 }
 
-#[derive(Default)]
-pub struct Scheduler {
-    tasks: VecDeque<Task>,
+pub struct Scheduler<A: Allocator> {
+    tasks: VecDeque<Task<A>>,
+    alloc: SharedAllocator<A>,
 }
 
-impl Scheduler {
-    pub fn new() -> Self {
+impl<A> Scheduler<A>
+where
+    A: Allocator + 'static,
+{
+    pub fn new(alloc: A) -> Self {
         Self {
             tasks: VecDeque::new(),
+            alloc: SharedAllocator::new(alloc),
         }
     }
 
@@ -77,7 +95,7 @@ impl Scheduler {
     where
         F: Future<Output = ()> + 'static,
     {
-        self.tasks.push_back(Task::new(task))
+        self.tasks.push_back(Task::new(task, self.alloc.clone()))
     }
 
     pub fn run(&mut self) {

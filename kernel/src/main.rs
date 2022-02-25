@@ -47,35 +47,53 @@ pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
         BootInfoFrameAllocator::init(&bi.memory_regions),
     );
 
-    dbg!(context.mapper.try_translate(pmo));
+    dbg!(context.mapper.try_translate(pmo).unwrap());
 
     let f = bi.framebuffer.as_mut().unwrap();
     let info = f.info();
-    let mut fb = framebuffer::Framebuffer::new(f.buffer_mut(), info);
-
-    fb.draw(&framebuffer::Character::new('H', 50, 50)).unwrap();
-    fb.draw(&framebuffer::Character::new('e', 60, 50)).unwrap();
-    fb.draw(&framebuffer::Character::new('l', 70, 50)).unwrap();
-    fb.draw(&framebuffer::Character::new('l', 80, 50)).unwrap();
-    fb.draw(&framebuffer::Character::new('o', 90, 50)).unwrap();
+    let mut fb = vesa::framebuffer::Framebuffer::new(f.buffer_mut(), info);
 
     mem::galloc::GLOBAL_ALLOC
-        .map(&mut context.mapper, &mut context.alloc)
+        .map(&mut context)
         .expect("unable to map the global allocator");
-    /*
-        {
-            let mut scheduler = Scheduler::new();
 
-            scheduler.spawn(async {
-                use kcore::futures::stream::StreamExt;
+    fb.draw(&vesa::text::Text::new(
+        alloc::string::String::from("Hello World!"),
+        80,
+        100,
+    ))
+    .unwrap();
 
-                while let Some(key) = (&mut *crate::init::KEYBOARD.lock()).next().await {
-                    // kprint!("{}", key)
-                }
-            });
-            scheduler.run();
-        }
-    */
+    use crate::mem::mmo::MemoryMappedObject;
+    use kcore::kalloc::slab::fixed::SlabPage;
+    use kcore::sync::SpinMutex;
+    use libx64::paging::frame::FrameAllocator;
+    use libx64::paging::page::{Page, PageRange};
+    use libx64::paging::Page4Kb;
+    use libx64::units::bits::Kb;
+
+    let sched_alloc = MemoryMappedObject::new(
+        SpinMutex::new(SlabPage::<4096>::from_page(Page::<Page4Kb>::containing(
+            VirtualAddr::new(0x1_0000_4000),
+        ))),
+        PageRange::<Page4Kb>::with_size(VirtualAddr::new(0x1_0000_4000), 4 * Kb),
+    );
+    sched_alloc.map(&mut context).expect("scheduler allocator");
+
+    {
+        /*
+        let mut scheduler = Scheduler::new(sched_alloc.into_resource());
+                scheduler.spawn(async {
+                    use kcore::futures::stream::StreamExt;
+
+                    while let Some(key) = crate::init::KEYBOARD.lock().next().await {
+                        dbg!(key);
+                    }
+                });
+                scheduler.run();
+        */
+    }
+
     #[cfg(test)]
     test_main();
 

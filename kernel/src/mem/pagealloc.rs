@@ -14,18 +14,16 @@ use bootloader::boot_info::{MemoryRegionKind, MemoryRegions};
 
 /// A [`FrameAllocator`] that returns usable frames from the bootloader's memory map.
 pub struct BootInfoFrameAllocator {
-    memory_map: &'static MemoryRegions,
-    alloc: SpinMutex<Slab<4096>>,
+    alloc: SpinMutex<Slab<{ Page4Kb as usize }>>,
 }
 
 impl FrameAllocator<Page4Kb> for BootInfoFrameAllocator {
     fn alloc(&mut self) -> Result<PhysicalFrame<Page4Kb>, FrameError> {
-        let ptr = self
-            .alloc
+        self.alloc
             .allocate(Layout::new::<[u8; 512]>())
             .map_err(|err| FrameError::Alloc)
-            .map(|ptr| PhysicalFrame::containing(PhysicalAddr::from_ptr(ptr.as_ptr() as *mut u8)));
-        ptr
+            .map(|ptr| PhysicalAddr::from_ptr(ptr.as_ptr() as *mut u8))
+            .map(PhysicalFrame::containing)
     }
 }
 
@@ -44,7 +42,6 @@ impl BootInfoFrameAllocator {
         let page = iter.next().unwrap().start().as_u64();
 
         BootInfoFrameAllocator {
-            memory_map,
             alloc: SpinMutex::new(
                 Slab::new(PageRange::with_size(VirtualAddr::new(page), 32 * Page4Kb)).unwrap(),
             ),

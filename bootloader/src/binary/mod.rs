@@ -166,11 +166,10 @@ pub fn set_up_mappings(
 
     // map framebuffer
     let framebuffer_virt_addr = if CONFIG.map_framebuffer {
-        info!("Map framebuffer");
-
         let start_frame = PhysicalFrame::<Page4Kb>::containing(framebuffer_addr);
         let end_frame =
             PhysicalFrame::<Page4Kb>::containing(framebuffer_addr + framebuffer_size - 1u64);
+        info!("Mapping framebuffer at {:?} - {:?}", start_frame, end_frame);
 
         let start_page = Page::<Page4Kb>::containing(frame_buffer_location(&mut used_entries));
         for (i, frame) in FrameRange::new(start_frame, end_frame).enumerate() {
@@ -189,7 +188,7 @@ pub fn set_up_mappings(
     let physical_memory_offset = {
         info!("Mapping physical memory");
 
-        let offset = VirtualAddr::new(0x100000000);
+        let offset = VirtualAddr::new(0x10_0000_0000);
 
         let max_phys = frame_allocator.memory_map().max_phys_addr();
 
@@ -247,7 +246,7 @@ pub fn create_boot_info(
     mappings: &mut Mappings,
     system_info: SystemInfo,
 ) -> Result<&'static mut BootInfo, FrameError> {
-    info!("Allocate bootinfo");
+    info!("Allocating bootinfo");
 
     // allocate and map space for the boot info
     let (boot_info, memory_regions) = {

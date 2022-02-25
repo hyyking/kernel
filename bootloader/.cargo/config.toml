@@ -1,0 +1,7 @@
+[build]
+target = "x86_64-bootloader.json"
+
+
+[unstable]
+build-std = ["core"]
+build-std-features = ["compiler-builtins-mem"]

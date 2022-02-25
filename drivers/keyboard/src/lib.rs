@@ -8,7 +8,7 @@ use core::{
 use kcore::{futures::task::AtomicWaker, queue::ArrayQueue};
 
 kcore::klazy! {
-    ref static QUEUE: ArrayQueue<u8> = { ArrayQueue::new(16) };
+    ref static QUEUE: ArrayQueue<u8> = { ArrayQueue::new(4) };
 }
 
 pub struct Keyboard {

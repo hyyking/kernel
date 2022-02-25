@@ -1,99 +1,15 @@
-#![no_std]
-
 use core::fmt::{self, Write};
 
+use crate::{Drawable, Pixel};
+
 use bootloader::boot_info::{FrameBufferInfo, PixelFormat};
-use kcore::{ptr::volatile::Volatile, sync::SpinMutex};
-use noto_sans_mono_bitmap::{get_bitmap, get_bitmap_width, BitmapChar, BitmapHeight, FontWeight};
-
-#[derive(Debug, Clone, Copy)]
-pub struct Pixel {
-    x: usize,
-    y: usize,
-    intensity: u8,
-}
-
-pub trait Drawable {
-    type Iter: Iterator<Item = Pixel>;
-
-    fn draw_box(&self) -> (usize, usize, usize, usize);
-    fn points(&self) -> Self::Iter;
-    fn padding(&self) -> usize {
-        0
-    }
-}
+use kcore::ptr::volatile::Volatile;
 
 pub struct Framebuffer {
     framebuffer: &'static mut [u8],
     info: FrameBufferInfo,
     x_pos: usize,
     y_pos: usize,
-}
-
-pub struct CharIter {
-    bitmap: BitmapChar,
-    from: (usize, usize),
-    at: (usize, usize),
-}
-
-impl Iterator for CharIter {
-    type Item = Pixel;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let (x, y) = self.from;
-
-        if self.at.0 >= self.bitmap.width() {
-            self.at.1 += 1;
-            self.at.0 = 0;
-        }
-        let (xd, yd) = self.at;
-        if yd >= self.bitmap.height() {
-            return None;
-        }
-        let ret = Some(Pixel {
-            x: x + xd,
-            y: y + yd,
-            intensity: self.bitmap.bitmap()[yd][xd],
-        });
-        self.at.0 += 1;
-
-        ret
-    }
-}
-
-pub struct Character {
-    c: char,
-    bitmap: BitmapChar,
-    x: usize,
-    y: usize,
-}
-
-impl Character {
-    pub fn new(c: char, x: usize, y: usize) -> Self {
-        let bitmap = get_bitmap(c, FontWeight::Regular, BitmapHeight::Size14).unwrap();
-        Self { c, bitmap, x, y }
-    }
-}
-
-impl Drawable for Character {
-    type Iter = CharIter;
-
-    fn draw_box(&self) -> (usize, usize, usize, usize) {
-        (
-            self.x,
-            self.y,
-            self.x + self.bitmap.width(),
-            self.y + self.bitmap.height(),
-        )
-    }
-
-    fn points(&self) -> Self::Iter {
-        CharIter {
-            bitmap: get_bitmap(self.c, FontWeight::Regular, BitmapHeight::Size14).unwrap(),
-            from: (self.x, self.y),
-            at: (0, 0),
-        }
-    }
 }
 
 impl Framebuffer {

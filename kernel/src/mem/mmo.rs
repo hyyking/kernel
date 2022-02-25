@@ -1,6 +1,9 @@
 use alloc::alloc::{AllocError, Allocator, GlobalAlloc, Layout};
 use core::ptr::NonNull;
 
+use crate::mem::context::MemoryContext;
+
+use kcore::sync::SpinMutex;
 use libx64::paging::{
     entry::Flags,
     frame::{FrameAllocator, FrameError},
@@ -8,64 +11,85 @@ use libx64::paging::{
     Page4Kb, PageCheck, PageSize,
 };
 
-use crate::sync::SpinMutex;
-
-pub struct Mapped<T, const P: u64>
+pub struct MemoryMappedObject<T, const P: u64>
 where
     PageCheck<P>: PageSize,
 {
     resource: T,
-    page: PageRange<P>,
+    pages: PageRange<P>,
 }
 
-impl<T, const P: u64> Mapped<T, P>
+impl<T, const P: u64> MemoryMappedObject<T, P>
 where
     PageCheck<P>: PageSize,
 {
-    pub const fn new(resource: T, page: PageRange<P>) -> Self {
-        Self { resource, page }
+    pub const fn new(resource: T, pages: PageRange<P>) -> Self {
+        Self { resource, pages }
     }
     pub const fn resource(&self) -> &T {
         &self.resource
     }
+
+    pub fn into_resource(self) -> T {
+        self.resource
+    }
+
     pub const fn pages(&self) -> &PageRange<P> {
-        &self.page
+        &self.pages
     }
 }
 
-impl<T, const N: u64> Mapped<T, N>
+impl<T, const N: u64> MemoryMappedObject<T, N>
 where
     PageCheck<N>: PageSize,
 {
     /// # Errors
     ///
     /// Errors if the allocator doesn't have enought frames
-    pub fn map<M, A>(&self, mapper: &mut M, alloc: &mut A) -> Result<(), FrameError>
+    pub fn map<M, A>(&self, ctx: &mut MemoryContext<M, A>) -> Result<(), FrameError>
     where
         A: FrameAllocator<N> + FrameAllocator<Page4Kb>,
         M: PageMapper<N>,
     {
-        self.page.clone().try_for_each(|page| {
-            mapper
+        self.pages.clone().try_for_each(|page| {
+            ctx.mapper
                 .map(
                     page,
-                    alloc.alloc()?,
+                    ctx.alloc.alloc()?,
                     Flags::PRESENT | Flags::RW | Flags::US,
-                    alloc,
+                    &mut ctx.alloc,
                 )
-                .map(TlbFlush::ignore)
+                .map(TlbFlush::flush)
         })?;
 
-        libx64::paging::invalidate_tlb();
         Ok(())
+    }
+
+    /// # Errors
+    ///
+    /// Errors if the allocator doesn't have enought frames
+    pub fn unmap<M, A>(self, mapper: &mut M) -> Result<(), FrameError>
+    where
+        A: FrameAllocator<N> + FrameAllocator<Page4Kb>,
+        M: PageMapper<N>,
+    {
+        self.pages
+            .clone()
+            .try_for_each(|page| mapper.unmap(page).map(TlbFlush::flush))
     }
 }
 
 // TODO: SOUNDNESS, but needed for GlobalAlloc
-unsafe impl<T, const P: u64> Sync for Mapped<SpinMutex<T>, P> where PageCheck<P>: PageSize {}
-unsafe impl<T, const P: u64> Send for Mapped<SpinMutex<T>, P> where PageCheck<P>: PageSize {}
+unsafe impl<T, const P: u64> Sync for MemoryMappedObject<SpinMutex<T>, P> where
+    PageCheck<P>: PageSize
+{
+}
+unsafe impl<T, const P: u64> Send for MemoryMappedObject<SpinMutex<T>, P> where
+    PageCheck<P>: PageSize
+{
+}
 
-unsafe impl<T, const P: u64> GlobalAlloc for Mapped<T, P>
+unsafe impl<T, const P: u64> GlobalAlloc for MemoryMappedObject<T, P>
 where
     T: Allocator,
     PageCheck<P>: PageSize,
@@ -110,7 +134,7 @@ where
     }
 }
 
-unsafe impl<T, const P: u64> Allocator for Mapped<T, P>
+unsafe impl<T, const P: u64> Allocator for MemoryMappedObject<T, P>
 where
     T: Allocator,
     PageCheck<P>: PageSize,

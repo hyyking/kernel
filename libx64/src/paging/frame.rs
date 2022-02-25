@@ -141,7 +141,7 @@ where
     #[must_use]
     pub const fn with_size(start: PhysicalAddr, size: u64) -> Self {
         debug_assert!(size % N == 0, "size must be a multiple of the page size");
-        let end = PhysicalAddr::new(start.as_u64() + size);
+        let end = PhysicalAddr::new(start.as_u64() + size - 1);
         Self { start, end, at: 0 }
     }
 }

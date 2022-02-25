@@ -58,15 +58,13 @@ fn main() -> io::Result<()> {
     assert!(cmd.status()?.success());
 
     let mut cmd = Command::new(env!("CARGO"));
+
     cmd.current_dir("bootloader");
-    cmd.arg("build").arg("--bin").arg("bios");
-    cmd.arg("--profile").arg("release");
-    cmd.arg("-Z").arg("unstable-options");
-    cmd.arg("--target").arg("x86_64-bootloader.json");
+    cmd.args(&["build", "--bin", "bios"]);
+    cmd.args(&["--profile", "release"]);
+
     cmd.arg("--features")
         .arg(args.features.join(" ") + " bios_bin");
-    cmd.arg("-Zbuild-std=core");
-    cmd.arg("-Zbuild-std-features=compiler-builtins-mem");
     if let Some(target_dir) = &args.target_dir {
         cmd.arg("--target-dir").arg(target_dir);
     }

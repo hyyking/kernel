@@ -70,7 +70,7 @@ pub mod user {
 
         static KB: RPort<u8> = RPort::new(0x60);
 
-        unsafe { dbg!(KB.read()) };
+        unsafe { KEYBOARD.lock().add_value(KB.read()) };
 
         PICS.lock().interupt_fn(IntIdx::Keyboard).expect("keyboard");
     }
