@@ -1,10 +1,16 @@
 KERNELIMG := "target/kernel.img"
 export KERNEL_MANIFEST := `find $(pwd -P)/kernel -type f -name Cargo.toml`
 
+QEMU_ARGS := "-enable-kvm -cpu host -drive format=raw,file=" + KERNELIMG
+
 run: image 
-    qemu-system-x86_64 \
-        -drive format=raw,file={{KERNELIMG}} \
-        -serial mon:stdio
+    qemu-system-x86_64 {{QEMU_ARGS}} -serial stdio
+
+run-debug: image 
+    qemu-system-x86_64 {{QEMU_ARGS}} -d int,cpu_reset -no-reboot -serial stdio
+
+run-gdb: image
+    qemu-system-x86_64 {{QEMU_ARGS}} -d int,cpu_reset -no-reboot -s -S -nographic
 
 image: kernel bootloader
     #!/usr/bin/sh

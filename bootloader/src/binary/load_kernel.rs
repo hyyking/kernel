@@ -151,9 +151,13 @@ where
         let start_page = Page::<Page4Kb>::containing(virt_start_addr);
 
         let mut segment_flags = Flags::PRESENT;
+
+        /* NOTE: My cpu doesn't support EFER.NX see CPUID feature section 4.1.4 Intel manual
         if !segment.flags().is_execute() {
             segment_flags |= Flags::NX;
         }
+        */
+
         if segment.flags().is_write() {
             segment_flags |= Flags::RW;
         }

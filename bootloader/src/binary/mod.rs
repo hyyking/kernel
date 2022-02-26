@@ -113,7 +113,9 @@ pub fn set_up_mappings(
     let kernel_page_table = &mut page_tables.kernel;
 
     // Enable support for the no-execute bit in page tables.
-    enable_nxe_bit();
+    // NOTE: My cpu doesn't support EFER.NX see CPUID feature section 4.1.4 Intel manual
+    // enable_nxe_bit();
+
     // Make the kernel respect the write-protection bits even when in ring 0 by default
     enable_write_protect_bit();
 
@@ -145,10 +147,10 @@ pub fn set_up_mappings(
     // identity-map context switch function, so that we don't get an immediate pagefault
     // after switching the active page table
     let context_switch_function = PhysicalAddr::new(context_switch as *const () as u64);
-    info!("Entry point at: {:#x}", entry_point.as_u64());
+    info!("Entry point at {:?}", entry_point);
     info!(
-        "Mapping context switch at: {:#x}",
-        context_switch as *const () as u64
+        "Mapping context switch at {:?}",
+        VirtualAddr::from_ptr(context_switch as *const ())
     );
     let context_switch_function_start_frame =
         PhysicalFrame::<Page4Kb>::containing(context_switch_function);
@@ -375,7 +377,7 @@ unsafe fn context_switch(addresses: Addresses) -> ! {
             in(reg) addresses.stack_top.as_u64(),
             in(reg) addresses.entry_point.as_u64(),
             in("rdi") addresses.boot_info as *const _ as usize,
-            options(noreturn, nostack)
+            options(nostack, noreturn)
         );
     }
 }
@@ -412,11 +414,13 @@ fn kernel_stack_start_location(used_entries: &mut UsedLevel4Entries) -> VirtualA
         .unwrap_or_else(|| used_entries.get_free_address())
 }
 
+/* NOTE: My cpu doesn't support EFER.NX see CPUID feature section 4.1.4 Intel manual
 #[inline]
 fn enable_nxe_bit() {
     use libx64::control::{efer, set_efer, Efer};
     set_efer(efer() | Efer::NXE);
 }
+*/
 
 #[inline]
 fn enable_write_protect_bit() {

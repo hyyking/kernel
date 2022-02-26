@@ -89,7 +89,10 @@ fn bootloader_main(
     memory_map_entry_count: u64,
 ) -> ! {
     qemu_logger::init().expect("unable to initialize logger");
-    log::info!("BIOS boot");
+    log::info!(
+        "BIOS boot at {:?}",
+        PhysicalAddr::from_ptr(bootloader_main as *const ())
+    );
 
     let kernel_end = PhysicalFrame::<Page4Kb>::containing(kernel_start + kernel_size - 1u64);
     let next_free = PhysicalFrame::<Page4Kb>::containing(kernel_end.ptr() + Page4Kb);
@@ -156,7 +159,6 @@ fn bootloader_main(
         framebuffer_info,
         rsdp_addr: detect_rsdp(),
     };
-
     bootloader::binary::load_and_switch_to_kernel(
         kernel,
         frame_allocator,
