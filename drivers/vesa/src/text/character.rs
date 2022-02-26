@@ -1,6 +1,6 @@
 use crate::{Drawable, Pixel};
 
-use noto_sans_mono_bitmap::{get_bitmap, get_bitmap_width, BitmapChar, BitmapHeight, FontWeight};
+use noto_sans_mono_bitmap::{get_bitmap, BitmapChar, BitmapHeight, FontWeight};
 
 pub struct CharIter {
     bitmap: BitmapChar,

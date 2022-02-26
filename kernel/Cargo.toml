@@ -20,7 +20,6 @@ page_mapper = {path = "../drivers/page_mapper"}
 scheduler = {path = "../drivers/scheduler"}
 pic = {path = "../drivers/pic"}
 keyboard = {path = "../drivers/keyboard"}
-vga = {path = "../drivers/vga"}
 vesa = {path = "../drivers/vesa"}
 serialuart16550 = {path = "../drivers/serialuart16550"}
 

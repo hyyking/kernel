@@ -9,21 +9,26 @@
 #![allow(clippy::cast_possible_truncation, clippy::missing_panics_doc)]
 
 #[macro_use]
-extern crate vga;
-#[macro_use]
 extern crate log;
 #[macro_use]
 extern crate qemu_logger;
-#[macro_use]
+
 extern crate alloc;
 
 use core::panic::PanicInfo;
 
-use libx64::{address::VirtualAddr, paging::page::PageTranslator};
+use crate::mem::mmo::MemoryMappedObject;
+use kcore::{kalloc::slab::fixed::SlabPage, sync::SpinMutex};
+use libx64::{
+    address::VirtualAddr,
+    paging::{
+        page::{Page, PageRange, PageTranslator},
+        Page4Kb,
+    },
+    units::bits::Kb,
+};
 
 use crate::mem::{context::MemoryLayout, pagealloc::BootInfoFrameAllocator};
-
-use scheduler::{Scheduler, Task};
 
 #[macro_use]
 mod infra;
@@ -33,14 +38,14 @@ pub mod mem;
 bootloader::entry_point!(kmain);
 
 pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
-    debug!("[OK] kernel loaded");
     qemu_logger::init().expect("unable to initialize logger");
+    info!("kernel loaded");
 
     init::kinit();
     libx64::sti();
 
     let pmo = VirtualAddr::new(bi.physical_memory_offset);
-    debug!("{:?}", pmo);
+
     let mut context = crate::mem::context::MemoryContext::new(
         MemoryLayout::init(&bi.memory_regions).expect("memory layout"),
         page_mapper::OffsetMapper::new(pmo),
@@ -64,14 +69,6 @@ pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
     ))
     .unwrap();
 
-    use crate::mem::mmo::MemoryMappedObject;
-    use kcore::kalloc::slab::fixed::SlabPage;
-    use kcore::sync::SpinMutex;
-    use libx64::paging::frame::FrameAllocator;
-    use libx64::paging::page::{Page, PageRange};
-    use libx64::paging::Page4Kb;
-    use libx64::units::bits::Kb;
-
     let sched_alloc = MemoryMappedObject::new(
         SpinMutex::new(SlabPage::<4096>::from_page(Page::<Page4Kb>::containing(
             VirtualAddr::new(0x1_0000_4000),
@@ -82,6 +79,7 @@ pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
 
     {
         /*
+        use scheduler::{Scheduler, Task};
         let mut scheduler = Scheduler::new(sched_alloc.into_resource());
                 scheduler.spawn(async {
                     use kcore::futures::stream::StreamExt;

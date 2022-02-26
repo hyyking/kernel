@@ -1,4 +1,4 @@
-use core::fmt::{self, Write};
+use core::fmt;
 
 use crate::{Drawable, Pixel};
 
@@ -125,9 +125,6 @@ unsafe impl Sync for Framebuffer {}
 
 impl fmt::Write for Framebuffer {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        for c in s.chars() {
-            self.write_char(c);
-        }
-        Ok(())
+        s.chars().try_for_each(|c| self.write_char(c))
     }
 }

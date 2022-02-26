@@ -4,10 +4,13 @@ Dependencies:
 
 - [`QEMU`](https://www.qemu.org/)
 - [`Cargo`](https://doc.rust-lang.org/cargo/)
+- [`just`](https://github.com/casey/just)
 
 Build:
 
-- `cargo run`
+- `just run`:   build the kernel and run with qemu
+- `just image`: build the kernel and create an image
+- `just build`: build the kernel
 
 ## Goal
 

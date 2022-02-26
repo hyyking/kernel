@@ -6,7 +6,7 @@ extern crate alloc;
 #[macro_use]
 extern crate log;
 
-use alloc::{alloc::Allocator, boxed::Box, collections::VecDeque, sync::Arc};
+use alloc::{alloc::Allocator, boxed::Box, collections::VecDeque};
 
 use core::{
     future::Future,

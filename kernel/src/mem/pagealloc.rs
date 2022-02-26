@@ -21,7 +21,7 @@ impl FrameAllocator<Page4Kb> for BootInfoFrameAllocator {
     fn alloc(&mut self) -> Result<PhysicalFrame<Page4Kb>, FrameError> {
         self.alloc
             .allocate(Layout::new::<[u8; 512]>())
-            .map_err(|err| FrameError::Alloc)
+            .map_err(|_err| FrameError::Alloc)
             .map(|ptr| PhysicalAddr::from_ptr(ptr.as_ptr() as *mut u8))
             .map(PhysicalFrame::containing)
     }

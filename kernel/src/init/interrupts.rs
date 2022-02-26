@@ -24,7 +24,7 @@ klazy! {
     };
 }
 
-pub extern "x86-interrupt" fn int3(f: InterruptFrame) {
+pub extern "x86-interrupt" fn int3(_f: InterruptFrame) {
     // kprintln!("{:#?}", f);
 }
 

@@ -44,13 +44,32 @@ impl log::Log for Logger {
     }
 
     fn log(&self, record: &log::Record) {
-        _qprint(format_args!(
-            "[{}][{}:{}] > {}\n",
-            level(record.level()),
-            record.module_path_static().unwrap_or(""),
-            record.line().unwrap_or(0),
-            record.args(),
-        ));
+        let module = record.module_path_static().unwrap_or("");
+        let line = record.line().unwrap_or(0);
+        let args = record.args();
+        match record.level() {
+            log::Level::Trace => _qprint(format_args!(
+                "\u{001b}[38;2;128;128;128;2m[{}][{}:{}] > {}\u{001b}[0m\n",
+                level(record.level()),
+                module,
+                line,
+                args
+            )),
+            log::Level::Debug => _qprint(format_args!(
+                "\u{001b}[4;1m[{}][{}:{}]\u{001b}[0m > {}\n",
+                level(record.level()),
+                module,
+                line,
+                args
+            )),
+            _ => _qprint(format_args!(
+                "[{}][{}:{}] > {}\n",
+                level(record.level()),
+                module,
+                line,
+                args
+            )),
+        }
     }
 
     fn flush(&self) {}
@@ -58,9 +77,9 @@ impl log::Log for Logger {
 
 const fn level(level: log::Level) -> &'static str {
     match level {
-        log::Level::Error => "ERROR",
-        log::Level::Warn => "WARN ",
-        log::Level::Info => "INFO ",
+        log::Level::Error => "\u{001b}[31;1mERROR\u{001b}[0m",
+        log::Level::Warn => "\u{001b}[33;1mWARN\u{001b}[0m",
+        log::Level::Info => "\u{001b}[34;1mINFO\u{001b}[0m",
         log::Level::Debug => "DEBUG",
         log::Level::Trace => "TRACE",
     }

@@ -1,15 +1,11 @@
-use bootloader::boot_info::{MemoryRegion, MemoryRegionKind, MemoryRegions};
+use bootloader::boot_info::{MemoryRegionKind, MemoryRegions};
 use libx64::{
     address::PhysicalAddr,
-    paging::{
-        frame::{FrameAllocator, FrameRange},
-        page::PageMapper,
-        Page4Kb,
-    },
+    paging::{frame::FrameRange, Page4Kb},
 };
 
 pub struct MemoryContext<M, A> {
-    layout: MemoryLayout,
+    _layout: MemoryLayout,
     pub mapper: M,
     pub alloc: A,
 }
@@ -22,7 +18,7 @@ pub struct MemoryLayout {
 impl<M, A> MemoryContext<M, A> {
     pub fn new(layout: MemoryLayout, mapper: M, alloc: A) -> Self {
         Self {
-            layout,
+            _layout: layout,
             mapper,
             alloc,
         }

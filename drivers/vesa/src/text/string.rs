@@ -1,12 +1,8 @@
 use core::ptr::NonNull;
 
-use crate::text::Character;
+use crate::{text::character::CharIter, text::Character, Drawable, Pixel};
 
-use crate::{Drawable, Pixel};
-
-use noto_sans_mono_bitmap::{get_bitmap, get_bitmap_width, BitmapChar, BitmapHeight, FontWeight};
-
-use super::character::CharIter;
+use noto_sans_mono_bitmap::{get_bitmap, BitmapHeight, FontWeight};
 
 const LETTER_PAD: usize = 0;
 
