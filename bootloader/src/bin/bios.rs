@@ -113,7 +113,7 @@ fn bootloader_main(
 
     // identity-map remaining physical memory (first gigabyte is already identity-mapped)
     let start_frame = PhysicalFrame::<Page2Mb>::containing(PhysicalAddr::new(Page1Gb));
-    let end_frame = PhysicalFrame::<Page2Mb>::containing(max_phys_addr - 1u64);
+    let end_frame = PhysicalFrame::<Page2Mb>::containing(max_phys_addr);
     for frame in FrameRange::new(start_frame, end_frame) {
         bootloader_page_table
             .id_map(frame, Flags::PRESENT | Flags::RW, &mut frame_allocator)

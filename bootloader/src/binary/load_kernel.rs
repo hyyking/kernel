@@ -45,8 +45,8 @@ where
         page_table: &'a mut M,
         frame_allocator: &'a mut F,
     ) -> Result<Self, &'static str> {
-        info!("Elf file loaded at {:#p}", bytes);
         let kernel_offset = PhysicalAddr::new(&bytes[0] as *const u8 as u64);
+        info!("Elf file loaded at {:?}", kernel_offset);
         if !kernel_offset.is_aligned(Page4Kb) {
             return Err("Loaded kernel ELF file is not sufficiently aligned");
         }
@@ -143,8 +143,9 @@ where
 
         let phys_start_addr = self.kernel_offset + segment.offset();
         let start_frame = PhysicalFrame::<Page4Kb>::containing(phys_start_addr);
-        let end_frame =
-            PhysicalFrame::<Page4Kb>::containing(phys_start_addr + segment.file_size() - 1u64);
+        let end_frame = PhysicalFrame::<Page4Kb>::containing(
+            (phys_start_addr + segment.file_size()).align_up(Page4Kb),
+        );
 
         let virt_start_addr =
             VirtualAddr::new(segment.virtual_addr()) + self.virtual_address_offset;
@@ -295,7 +296,7 @@ where
                 offset: _,
                 flags,
             }) => (PhysicalFrame::<Page4Kb>::containing(addr), flags),
-            Err(_) => panic!("translation failed"),
+            Err(e) => panic!("{:?}", e),
         };
 
         if flags.contains(COPIED) {

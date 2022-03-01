@@ -104,7 +104,7 @@ where
     addr: VirtualAddr,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct PageRange<const N: u64>
 where
     PageCheck<N>: PageSize,
@@ -215,8 +215,10 @@ where
     PageCheck<N>: PageSize,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("Page")
-            .field("size", &{
+        write!(
+            f,
+            "Page<{}>({:#x})",
+            &{
                 #[allow(non_upper_case_globals)]
                 match N {
                     Page4Kb => "4Kb",
@@ -224,9 +226,32 @@ where
                     Page1Gb => "1Gb",
                     _ => "UKN",
                 }
-            })
-            .field("ptr", &format_args!("{:#x}", &self.addr.as_u64()))
-            .finish()
+            },
+            self.ptr().as_u64(),
+        )
+    }
+}
+
+impl<const N: u64> core::fmt::Debug for PageRange<N>
+where
+    PageCheck<N>: PageSize,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "PageRange<{}>({:#x}..{:#x})",
+            &{
+                #[allow(non_upper_case_globals)]
+                match N {
+                    Page4Kb => "4Kb",
+                    Page2Mb => "2Mb",
+                    Page1Gb => "1Gb",
+                    _ => "UKN",
+                }
+            },
+            self.start().as_u64(),
+            self.end().as_u64(),
+        )
     }
 }
 
@@ -238,7 +263,7 @@ mod test {
     #[test]
     fn inclusive() {
         assert_eq!(
-            PageRange::<Page4Kb>::new(VirtualAddr::new(0), VirtualAddr::new(Page4Kb)).count(),
+            PageRange::<Page4Kb>::new_addr(VirtualAddr::new(0), VirtualAddr::new(Page4Kb)).count(),
             2
         )
     }

@@ -16,7 +16,7 @@ use parsed_config::CONFIG;
 use libx64::address::{PhysicalAddr, VirtualAddr};
 use libx64::paging::{
     entry::Flags,
-    frame::{FrameAllocator, FrameError, FrameRange, PhysicalFrame},
+    frame::{FrameAllocator, FrameError, FrameRange, FrameRangeInclusive, PhysicalFrame},
     page::{Page, PageMapper, PageRange, TlbFlush},
     Page2Mb, Page4Kb,
 };
@@ -152,12 +152,8 @@ pub fn set_up_mappings(
         "Mapping context switch at {:?}",
         VirtualAddr::from_ptr(context_switch as *const ())
     );
-    let context_switch_function_start_frame =
-        PhysicalFrame::<Page4Kb>::containing(context_switch_function);
-    for frame in FrameRange::new(
-        context_switch_function_start_frame,
-        PhysicalFrame::containing(context_switch_function_start_frame.ptr() + Page4Kb),
-    ) {
+    // Allocate two page for the context switch
+    for frame in FrameRange::<Page4Kb>::with_size(context_switch_function, 2 * Page4Kb) {
         kernel_page_table
             .id_map(frame, Flags::PRESENT, frame_allocator)
             .map(TlbFlush::flush)?
@@ -169,12 +165,12 @@ pub fn set_up_mappings(
     // map framebuffer
     let framebuffer_virt_addr = if CONFIG.map_framebuffer {
         let start_frame = PhysicalFrame::<Page4Kb>::containing(framebuffer_addr);
-        let end_frame =
-            PhysicalFrame::<Page4Kb>::containing(framebuffer_addr + framebuffer_size - 1u64);
-        info!("Mapping framebuffer at {:?} - {:?}", start_frame, end_frame);
+        let end_frame = PhysicalFrame::<Page4Kb>::containing(framebuffer_addr + framebuffer_size);
+        let framebuffer_phys_range = FrameRange::new(start_frame, end_frame);
+        info!("Mapping framebuffer at {:?}", framebuffer_phys_range);
 
         let start_page = Page::<Page4Kb>::containing(frame_buffer_location(&mut used_entries));
-        for (i, frame) in FrameRange::new(start_frame, end_frame).enumerate() {
+        for (i, frame) in framebuffer_phys_range.enumerate() {
             let offset = u64::try_from(i).unwrap() * Page4Kb;
             let page = Page::<Page4Kb>::containing(start_page.ptr() + offset);
             kernel_page_table
@@ -195,7 +191,7 @@ pub fn set_up_mappings(
         let max_phys = frame_allocator.memory_map().max_phys_addr();
 
         let start_frame = PhysicalFrame::<Page2Mb>::containing(PhysicalAddr::new(0));
-        let end_frame = PhysicalFrame::<Page2Mb>::containing(max_phys - 1u64);
+        let end_frame = PhysicalFrame::<Page2Mb>::containing(max_phys);
 
         for frame in FrameRange::<Page2Mb>::new(start_frame, end_frame) {
             let page = Page::<Page2Mb>::containing(offset + frame.ptr().as_u64());

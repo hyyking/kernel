@@ -1,4 +1,4 @@
-#![feature(never_type)]
+#![feature(never_type, step_trait)]
 #![feature(abi_x86_interrupt)]
 #![no_std]
 #![allow(

@@ -23,6 +23,16 @@ pub const Page2Mb: u64 = 2 * Mb;
 #[allow(non_upper_case_globals)]
 pub const Page1Gb: u64 = Gb;
 
+pub const fn pretty_pagesize(n: u64) -> &'static str {
+    #[allow(non_upper_case_globals)]
+    match n {
+        Page4Kb => "4Kb",
+        Page2Mb => "2Mb",
+        Page1Gb => "1Gb",
+        _ => "UKN",
+    }
+}
+
 pub trait PageSize {}
 pub trait NotHugePageSize: PageSize {}
 pub trait NotGiantPageSize: PageSize {}

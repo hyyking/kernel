@@ -2,7 +2,7 @@ use kcore::{kalloc::slab::dynamic::Slab, sync::SpinMutex};
 use libx64::{
     address::{PhysicalAddr, VirtualAddr},
     paging::{
-        frame::{FrameAllocator, FrameError, FrameRange, PhysicalFrame},
+        frame::{FrameAllocator, FrameError, FrameRangeInclusive, PhysicalFrame},
         page::PageRange,
         Page4Kb,
     },
@@ -33,7 +33,8 @@ impl BootInfoFrameAllocator {
             .iter()
             .filter(|r| r.kind == MemoryRegionKind::Usable)
             .map(|r| {
-                FrameRange::<Page4Kb>::new_addr(
+                // TODO: this is wrong it should be a non inclusive range
+                FrameRangeInclusive::<Page4Kb>::new_addr(
                     PhysicalAddr::new(r.start),
                     PhysicalAddr::new(r.end),
                 )

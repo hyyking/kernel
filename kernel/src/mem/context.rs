@@ -1,7 +1,7 @@
 use bootloader::boot_info::{MemoryRegionKind, MemoryRegions};
 use libx64::{
     address::PhysicalAddr,
-    paging::{frame::FrameRange, Page4Kb},
+    paging::{frame::FrameRangeInclusive, Page4Kb},
 };
 
 pub struct MemoryContext<M, A> {
@@ -12,7 +12,7 @@ pub struct MemoryContext<M, A> {
 
 pub struct MemoryLayout {
     memory_map: &'static MemoryRegions,
-    pub usable: FrameRange<Page4Kb>,
+    pub usable: FrameRangeInclusive<Page4Kb>,
 }
 
 impl<M, A> MemoryContext<M, A> {
@@ -39,7 +39,7 @@ impl MemoryLayout {
             .iter()
             .filter(|&r| r.kind == MemoryRegionKind::Usable)
             .map(|r| {
-                FrameRange::<Page4Kb>::new_addr(
+                FrameRangeInclusive::<Page4Kb>::new_addr(
                     PhysicalAddr::new(r.start),
                     PhysicalAddr::new(r.end),
                 )

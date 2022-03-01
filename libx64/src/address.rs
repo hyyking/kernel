@@ -2,7 +2,7 @@ use core::ptr::NonNull;
 
 use crate::paging::table::{PageLevel, PageTableIndex};
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 #[repr(transparent)]
 pub struct VirtualAddr(u64);
 
@@ -84,7 +84,7 @@ impl core::fmt::Debug for VirtualAddr {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 #[repr(transparent)]
 pub struct PhysicalAddr(u64);
 
