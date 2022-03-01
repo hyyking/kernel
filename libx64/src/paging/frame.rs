@@ -101,6 +101,7 @@ where
     }
 }
 
+#[derive(Clone, Eq, PartialEq)]
 pub struct FrameRangeInclusive<const N: u64>(core::ops::RangeInclusive<PhysicalFrame<N>>)
 where
     PageCheck<N>: PageSize;
@@ -206,6 +207,7 @@ where
     }
 }
 
+#[derive(Clone, Eq, PartialEq)]
 pub struct FrameRange<const N: u64>(core::ops::Range<PhysicalFrame<N>>)
 where
     PageCheck<N>: PageSize;

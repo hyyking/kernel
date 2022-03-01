@@ -7,7 +7,7 @@ use libx64::{
     paging::{
         entry::Flags,
         frame::{FrameAllocator, FrameError, FrameRange, PhysicalFrame},
-        page::{Page, PageMapper, PageRange, PageTranslator, TlbFlush},
+        page::{Page, PageMapper, PageRange, PageRangeInclusive, PageTranslator, TlbFlush},
         table::Translation,
         Page4Kb,
     },
@@ -250,7 +250,7 @@ where
         let start_page =
             Page::<Page4Kb>::containing(VirtualAddr::new(zero_start.as_u64()).align_up(Page4Kb));
         let end_page = Page::<Page4Kb>::containing(zero_end);
-        for page in PageRange::new(start_page, end_page) {
+        for page in PageRangeInclusive::new(start_page, end_page) {
             // allocate a new unused frame
             let frame = self.frame_allocator.alloc().unwrap();
 
@@ -332,7 +332,7 @@ where
                 let start = VirtualAddr::new(start);
                 let end = VirtualAddr::new(end);
                 let start_page = Page::<Page4Kb>::containing(start);
-                let end_page = Page::<Page4Kb>::containing(end - 1u64);
+                let end_page = Page::<Page4Kb>::containing(end);
                 for page in PageRange::new(start_page, end_page) {
                     // Translate the page and get the flags.
                     let res = self.page_table.try_translate(page.ptr());

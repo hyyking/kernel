@@ -3,7 +3,7 @@ use libx64::{
     address::{PhysicalAddr, VirtualAddr},
     paging::{
         frame::{FrameAllocator, FrameError, FrameRangeInclusive, PhysicalFrame},
-        page::PageRange,
+        page::PageRangeInclusive,
         Page4Kb,
     },
 };
@@ -44,7 +44,11 @@ impl BootInfoFrameAllocator {
 
         BootInfoFrameAllocator {
             alloc: SpinMutex::new(
-                Slab::new(PageRange::with_size(VirtualAddr::new(page), 32 * Page4Kb)).unwrap(),
+                Slab::new(PageRangeInclusive::with_size(
+                    VirtualAddr::new(page),
+                    32 * Page4Kb,
+                ))
+                .unwrap(),
             ),
         }
     }

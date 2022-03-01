@@ -9,7 +9,7 @@ use core::{
 
 use libx64::{
     address::VirtualAddr,
-    paging::{page::PageRange, Page4Kb},
+    paging::{page::PageRangeInclusive, Page4Kb},
 };
 
 use crate::kalloc::slab::{SlabCheck, SlabSize};
@@ -89,7 +89,7 @@ impl<const MIN: usize> Slab<MIN>
 where
     SlabCheck<MIN>: SlabSize,
 {
-    pub const fn new(page: PageRange<Page4Kb>) -> Result<Self, Error> {
+    pub const fn new(page: PageRangeInclusive<Page4Kb>) -> Result<Self, Error> {
         if !MIN.is_power_of_two() {
             return Err(Error::InvalidBucketSize);
         }

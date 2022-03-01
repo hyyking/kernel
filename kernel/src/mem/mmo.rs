@@ -3,11 +3,10 @@ use core::ptr::NonNull;
 
 use crate::mem::context::MemoryContext;
 
-use kcore::sync::SpinMutex;
 use libx64::paging::{
     entry::Flags,
     frame::{FrameAllocator, FrameError},
-    page::{PageMapper, PageRange, TlbFlush},
+    page::{PageMapper, PageRangeInclusive, TlbFlush},
     Page4Kb, PageCheck, PageSize,
 };
 
@@ -16,14 +15,14 @@ where
     PageCheck<P>: PageSize,
 {
     resource: T,
-    pages: PageRange<P>,
+    pages: PageRangeInclusive<P>,
 }
 
 impl<T, const P: u64> MemoryMappedObject<T, P>
 where
     PageCheck<P>: PageSize,
 {
-    pub const fn new(resource: T, pages: PageRange<P>) -> Self {
+    pub const fn new(resource: T, pages: PageRangeInclusive<P>) -> Self {
         Self { resource, pages }
     }
     pub const fn resource(&self) -> &T {
@@ -34,7 +33,7 @@ where
         self.resource
     }
 
-    pub const fn pages(&self) -> &PageRange<P> {
+    pub const fn pages(&self) -> &PageRangeInclusive<P> {
         &self.pages
     }
 }
@@ -77,16 +76,6 @@ where
             .clone()
             .try_for_each(|page| mapper.unmap(page).map(TlbFlush::flush))
     }
-}
-
-// TODO: SOUNDNESS, but needed for GlobalAlloc
-unsafe impl<T, const P: u64> Sync for MemoryMappedObject<SpinMutex<T>, P> where
-    PageCheck<P>: PageSize
-{
-}
-unsafe impl<T, const P: u64> Send for MemoryMappedObject<SpinMutex<T>, P> where
-    PageCheck<P>: PageSize
-{
 }
 
 unsafe impl<T, const P: u64> GlobalAlloc for MemoryMappedObject<T, P>

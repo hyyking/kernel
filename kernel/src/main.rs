@@ -22,7 +22,7 @@ use kcore::{kalloc::slab::fixed::SlabPage, sync::SpinMutex};
 use libx64::{
     address::VirtualAddr,
     paging::{
-        page::{Page, PageRange, PageTranslator},
+        page::{Page, PageRangeInclusive, PageTranslator},
         Page4Kb,
     },
     units::bits::Kb,
@@ -73,7 +73,8 @@ pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
         SpinMutex::new(SlabPage::<4096>::from_page(Page::<Page4Kb>::containing(
             VirtualAddr::new(0x1_0000_4000),
         ))),
-        PageRange::<Page4Kb>::with_size(VirtualAddr::new(0x1_0000_4000), 4 * Kb),
+        // NOTE: ???
+        PageRangeInclusive::<Page4Kb>::with_size(VirtualAddr::new(0x1_0000_4000), 4 * Kb),
     );
     sched_alloc.map(&mut context).expect("scheduler allocator");
 

@@ -16,8 +16,8 @@ use parsed_config::CONFIG;
 use libx64::address::{PhysicalAddr, VirtualAddr};
 use libx64::paging::{
     entry::Flags,
-    frame::{FrameAllocator, FrameError, FrameRange, FrameRangeInclusive, PhysicalFrame},
-    page::{Page, PageMapper, PageRange, TlbFlush},
+    frame::{FrameAllocator, FrameError, FrameRange, PhysicalFrame},
+    page::{Page, PageMapper, PageRange, PageRangeInclusive, TlbFlush},
     Page2Mb, Page4Kb,
 };
 
@@ -129,7 +129,7 @@ pub fn set_up_mappings(
     let stack_end = {
         let stack_size = CONFIG.kernel_stack_size.unwrap_or(20 * Page4Kb);
         let end_addr = stack_start_addr + stack_size;
-        Page::<Page4Kb>::containing(end_addr - 1u64)
+        Page::<Page4Kb>::containing(end_addr)
     };
 
     trace!(
@@ -257,8 +257,8 @@ pub fn create_boot_info(
             memory_map_regions_addr + regions * mem::size_of::<MemoryRegion>();
 
         let start_page = Page::<Page4Kb>::containing(boot_info_addr);
-        let end_page = Page::<Page4Kb>::containing(memory_map_regions_end - 1u64);
-        for page in PageRange::new(start_page, end_page) {
+        let end_page = Page::<Page4Kb>::containing(memory_map_regions_end);
+        for page in PageRangeInclusive::new(start_page, end_page) {
             let flags = Flags::PRESENT | Flags::RW;
 
             let frame = frame_allocator

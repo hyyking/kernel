@@ -14,6 +14,9 @@ where
     len: u32,
 }
 
+unsafe impl<const N: usize> Send for SlabPage<N> where SlabCheck<N>: SlabSize {}
+unsafe impl<const N: usize> Sync for SlabPage<N> where SlabCheck<N>: SlabSize {}
+
 impl<const N: usize> SlabPage<N>
 where
     SlabCheck<N>: SlabSize,
