@@ -77,13 +77,19 @@ where
     }
 
     fn forward_checked(start: Self, count: usize) -> Option<Self> {
-        let addr = start.addr + N * u64::try_from(count).ok()?;
-        Some(Self::containing(addr))
+        let addr = start
+            .addr
+            .as_u64()
+            .checked_add(N * u64::try_from(count).ok()?)?;
+        Some(Self::containing(PhysicalAddr::new(addr)))
     }
 
     fn backward_checked(start: Self, count: usize) -> Option<Self> {
-        let addr = start.addr - N * u64::try_from(count).ok()?;
-        Some(Self::containing(addr))
+        let addr = start
+            .addr
+            .as_u64()
+            .checked_sub(N * u64::try_from(count).ok()?)?;
+        Some(Self::containing(PhysicalAddr::new(addr)))
     }
 }
 

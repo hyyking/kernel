@@ -2,14 +2,9 @@
 members = [
     "kernel",
     "libx64",
-    "kcore",
-    
+    "kcore",  
+    "kalloc",
     "bootloader",
-    "bootloader/tests/runner",
-    "bootloader/tests/test_kernels/default_settings",
-    "bootloader/tests/test_kernels/map_phys_mem",
-    "bootloader/tests/test_kernels/higher_half",
-    "bootloader/tests/test_kernels/pie",
 
     "utils/bitfield",
     "utils/interrupt_list",

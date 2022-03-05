@@ -1,11 +1,11 @@
 [package]
-name = "scheduler"
+name = "kalloc"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-log = {version="0.4"}
-kcore = {path = "../../kcore"}
-kalloc = {path = "../../kalloc"}
+bitflags = {version="1", default-features=false}
+kcore = {path = "../kcore", features = ["alloc"]}
+libx64 = {path = "../libx64"}

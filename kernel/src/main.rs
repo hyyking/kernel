@@ -18,7 +18,9 @@ extern crate alloc;
 use core::panic::PanicInfo;
 
 use crate::mem::mmo::MemoryMappedObject;
-use kcore::{kalloc::slab::fixed::SlabPage, sync::SpinMutex};
+use kalloc::slab::fixed::SlabPage;
+use kcore::sync::SpinMutex;
+
 use libx64::{
     address::VirtualAddr,
     paging::{
@@ -51,6 +53,8 @@ pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
         page_mapper::OffsetMapper::new(pmo),
         BootInfoFrameAllocator::init(&bi.memory_regions),
     );
+
+    dbg!(context.layout().usable.len());
 
     dbg!(context.mapper.try_translate(pmo).unwrap());
 

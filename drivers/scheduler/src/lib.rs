@@ -14,7 +14,7 @@ use core::{
     task::{Context, Poll, RawWaker, RawWakerVTable, Waker},
 };
 
-use kcore::kalloc::SharedAllocator;
+use kalloc::shared::SharedAllocator;
 
 struct SchedulerWaker;
 

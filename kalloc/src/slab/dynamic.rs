@@ -12,7 +12,7 @@ use libx64::{
     paging::{page::PageRangeInclusive, Page4Kb},
 };
 
-use crate::kalloc::slab::{SlabCheck, SlabSize};
+use crate::slab::{SlabCheck, SlabSize};
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 #[repr(transparent)]
@@ -213,7 +213,7 @@ where
     }
 }
 
-unsafe impl<const MIN: usize> Allocator for crate::sync::SpinMutex<Slab<MIN>>
+unsafe impl<const MIN: usize> Allocator for Slab<MIN>
 where
     SlabCheck<MIN>: SlabSize,
 {
@@ -221,7 +221,9 @@ where
         // Out of memory
         let size = core::cmp::max(layout.size().next_power_of_two() * 8, MIN as usize);
 
-        let mut this = self.lock();
+        // FIXME: this is wrong on so many levels
+        #[allow(unsafe_op_in_unsafe_fn, unused_unsafe)]
+        let this = unsafe { &mut *(self as *const _ as usize as *mut Self) };
         // fast path
         //
         if !this.have_buckets_for(size) {
@@ -250,7 +252,9 @@ where
     }
 
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-        let mut this = self.lock();
+        // FIXME: this is wrong on so many levels
+        #[allow(unsafe_op_in_unsafe_fn, unused_unsafe)]
+        let mut this = unsafe { &mut *(self as *const _ as usize as *mut Self) };
 
         let range = match this.bin_for(ptr) {
             Some(bin) if layout.size() <= bin.size() => bin.range(),
@@ -309,7 +313,9 @@ where
             )));
         }
 
-        let mut this = self.lock();
+        // FIXME: this is wrong on so many levels
+        #[allow(unsafe_op_in_unsafe_fn, unused_unsafe)]
+        let this = unsafe { &mut *(self as *const _ as usize as *mut Self) };
 
         let range = match this.bin_for(ptr) {
             Some(bin) if old_layout.size() <= bin.size() => bin.range(),
@@ -388,7 +394,10 @@ where
             new_layout.size() <= old_layout.size(),
             "`new_layout.size()` must be smaller than or equal to `old_layout.size()`"
         );
-        let mut this = self.lock();
+
+        // FIXME: this is wrong on so many levels
+        #[allow(unsafe_op_in_unsafe_fn, unused_unsafe)]
+        let this = unsafe { &mut *(self as *const _ as usize as *mut Self) };
 
         let range = match this.bin_for(ptr) {
             Some(bin) if old_layout.size() <= bin.size() => bin.range(),
@@ -444,8 +453,8 @@ mod tests {
 
     #[test]
     fn allocate_all_slabs() {
-        let buddy = crate::sync::SpinMutex::new(
-            Slab::<128>::new(PageRange::with_size(
+        let buddy = kcore::sync::SpinMutex::new(
+            Slab::<128>::new(PageRangeInclusive::with_size(
                 VirtualAddr::new(0x0000_dead_beaf_0000),
                 Page4Kb,
             ))
@@ -501,8 +510,8 @@ mod tests {
 
     #[test]
     fn allocate_all_big() {
-        let buddy = crate::sync::SpinMutex::new(
-            Slab::<128>::new(PageRange::with_size(
+        let buddy = kcore::sync::SpinMutex::new(
+            Slab::<128>::new(PageRangeInclusive::with_size(
                 VirtualAddr::new(0x0000_dead_beaf_0000),
                 Page4Kb,
             ))
@@ -517,8 +526,8 @@ mod tests {
     #[test]
     fn shrink_once() {
         // TODO: expand tests
-        let buddy = crate::sync::SpinMutex::new(
-            Slab::<128>::new(PageRange::with_size(
+        let buddy = kcore::sync::SpinMutex::new(
+            Slab::<128>::new(PageRangeInclusive::with_size(
                 VirtualAddr::new(0x0000_dead_beaf_0000),
                 Page4Kb,
             ))
@@ -556,8 +565,8 @@ mod tests {
 
     #[test]
     fn grow_big_fast() {
-        let buddy = crate::sync::SpinMutex::new(
-            Slab::<128>::new(PageRange::with_size(
+        let buddy = kcore::sync::SpinMutex::new(
+            Slab::<128>::new(PageRangeInclusive::with_size(
                 VirtualAddr::new(0x0000_dead_beaf_0000),
                 Page4Kb,
             ))
@@ -600,8 +609,8 @@ mod tests {
 
     #[test]
     fn allocate_mixed() {
-        let buddy = crate::sync::SpinMutex::new(
-            Slab::<128>::new(PageRange::with_size(
+        let buddy = kcore::sync::SpinMutex::new(
+            Slab::<128>::new(PageRangeInclusive::with_size(
                 VirtualAddr::new(0x0000_dead_beaf_0000),
                 Page4Kb,
             ))
@@ -663,8 +672,8 @@ mod tests {
 
     #[test]
     fn deallocate_all_slabs() {
-        let buddy = crate::sync::SpinMutex::new(
-            Slab::<128>::new(PageRange::with_size(
+        let buddy = kcore::sync::SpinMutex::new(
+            Slab::<128>::new(PageRangeInclusive::with_size(
                 VirtualAddr::new(0x0000_dead_beaf_0000),
                 Page4Kb,
             ))

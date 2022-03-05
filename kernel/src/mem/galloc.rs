@@ -1,4 +1,6 @@
-use kcore::{kalloc::slab::fixed::SlabPage, sync::SpinMutex};
+use kalloc::slab::fixed::SlabPage;
+use kcore::sync::SpinMutex;
+
 use libx64::{
     address::VirtualAddr,
     paging::{

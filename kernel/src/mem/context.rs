@@ -5,7 +5,7 @@ use libx64::{
 };
 
 pub struct MemoryContext<M, A> {
-    _layout: MemoryLayout,
+    layout: MemoryLayout,
     pub mapper: M,
     pub alloc: A,
 }
@@ -18,10 +18,14 @@ pub struct MemoryLayout {
 impl<M, A> MemoryContext<M, A> {
     pub fn new(layout: MemoryLayout, mapper: M, alloc: A) -> Self {
         Self {
-            _layout: layout,
+            layout,
             mapper,
             alloc,
         }
+    }
+
+    pub const fn layout(&self) -> &MemoryLayout {
+        &self.layout
     }
 
     /// Get a reference to the memory context's mapper.

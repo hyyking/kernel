@@ -5,8 +5,6 @@ use alloc::{
     sync::Arc,
 };
 
-pub mod slab;
-
 #[derive(Debug)]
 pub struct SharedAllocator<A> {
     inner: Arc<A>,
