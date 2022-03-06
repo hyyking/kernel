@@ -3,24 +3,18 @@ use core::ptr::NonNull;
 
 use libx64::paging::{page::Page, Page4Kb};
 
-use crate::slab::{SlabCheck, SlabSize};
-
-pub struct SlabPage<const N: usize>
-where
-    SlabCheck<N>: SlabSize,
-{
+pub struct SlabPage {
     base: NonNull<u8>,
     mask: u32,
     len: u32,
 }
 
-unsafe impl<const N: usize> Send for SlabPage<N> where SlabCheck<N>: SlabSize {}
-unsafe impl<const N: usize> Sync for SlabPage<N> where SlabCheck<N>: SlabSize {}
+const N: usize = 4096;
 
-impl<const N: usize> SlabPage<N>
-where
-    SlabCheck<N>: SlabSize,
-{
+unsafe impl Send for SlabPage {}
+unsafe impl Sync for SlabPage {}
+
+impl SlabPage {
     const SLOT_BYTES: usize = (N as usize) / 8;
 
     pub const fn from_page(page: Page<Page4Kb>) -> Self {
@@ -88,10 +82,7 @@ where
     }
 }
 
-impl<const N: usize> core::fmt::Debug for SlabPage<N>
-where
-    SlabCheck<N>: SlabSize,
-{
+impl core::fmt::Debug for SlabPage {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("SlabPage")
             .field("base", &format_args!("{:#x}", self.base.as_ptr() as u64))
@@ -102,28 +93,25 @@ where
     }
 }
 
-unsafe impl<const N: usize> Allocator for SlabPage<N>
-where
-    SlabCheck<N>: SlabSize,
-{
+unsafe impl Allocator for SlabPage {
     fn allocate(
         &self,
         layout: core::alloc::Layout,
     ) -> Result<core::ptr::NonNull<[u8]>, core::alloc::AllocError> {
-        assert!(layout.size() <= SlabPage::<N>::SLOT_BYTES);
+        assert!(layout.size() <= SlabPage::SLOT_BYTES);
 
         // FIXME: this is wrong on so many levels
         #[allow(unsafe_op_in_unsafe_fn, unused_unsafe)]
         let this = unsafe { &mut *(self as *const _ as usize as *mut Self) };
-        libx64::without_interrupts(|| SlabPage::<N>::allocate(this, layout))
+        libx64::without_interrupts(|| SlabPage::allocate(this, layout))
     }
 
     unsafe fn deallocate(&self, ptr: core::ptr::NonNull<u8>, layout: core::alloc::Layout) {
-        assert!(layout.size() <= SlabPage::<N>::SLOT_BYTES);
+        assert!(layout.size() <= SlabPage::SLOT_BYTES);
 
         // FIXME: this is wrong on so many levels
         #[allow(unsafe_op_in_unsafe_fn, unused_unsafe)]
         let this = unsafe { &mut *(self as *const _ as usize as *mut Self) };
-        libx64::without_interrupts(|| SlabPage::<N>::deallocate(this, ptr, layout))
+        libx64::without_interrupts(|| SlabPage::deallocate(this, ptr, layout))
     }
 }
