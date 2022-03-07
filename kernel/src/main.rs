@@ -2,6 +2,8 @@
 #![feature(alloc_error_handler)]
 #![feature(allocator_api)]
 #![feature(abi_x86_interrupt)]
+#![feature(step_trait)]
+#![feature(array_chunks)]
 #![test_runner(crate::infra::tests::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 #![no_main]
@@ -18,7 +20,7 @@ extern crate alloc;
 use core::panic::PanicInfo;
 
 use crate::mem::mmo::MemoryMappedObject;
-use kalloc::slab::fixed::SlabPage;
+use kalloc::slab::SlabPage;
 use kcore::sync::SpinMutex;
 
 use libx64::{
@@ -73,14 +75,20 @@ pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
     ))
     .unwrap();
 
-    let sched_alloc = MemoryMappedObject::new(
-        SpinMutex::new(SlabPage::<4096>::from_page(Page::<Page4Kb>::containing(
-            VirtualAddr::new(0x1_0000_4000),
-        ))),
-        // NOTE: ???
-        PageRangeInclusive::<Page4Kb>::with_size(VirtualAddr::new(0x1_0000_4000), 4 * Kb),
-    );
-    sched_alloc.map(&mut context).expect("scheduler allocator");
+    {
+        /*
+        let sched_alloc = MemoryMappedObject::new(
+            SpinMutex::new(SlabPage::from_page(Page::<Page4Kb>::containing(
+                VirtualAddr::new(0x1_0000_4000),
+            ))),
+            // NOTE: ???
+            PageRangeInclusive::<Page4Kb>::with_size(VirtualAddr::new(0x1_0000_4000), 4 * Kb),
+        );
+        sched_alloc.map(&mut context).expect("scheduler allocator");
+
+        dbg!(alloc::boxed::Box::new_in(1u8, &sched_alloc));
+        */
+    }
 
     {
         /*

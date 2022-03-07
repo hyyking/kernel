@@ -4,6 +4,7 @@ pub mod context;
 pub mod galloc;
 pub mod mmo;
 pub mod pagealloc;
+pub mod pmm;
 
 #[alloc_error_handler]
 fn alloc_error_handler(error: Layout) -> ! {
