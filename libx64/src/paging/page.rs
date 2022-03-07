@@ -355,7 +355,7 @@ where
     pub const fn with_size(start: VirtualAddr, size: u64) -> Self {
         debug_assert!(size % N == 0, "size must be a multiple of the page size");
 
-        let end = Page::containing(VirtualAddr::new(start.as_u64() + size));
+        let end = Page::containing(VirtualAddr::new(start.as_u64() + size + 1));
         let start = Page::containing(VirtualAddr::new(start.as_u64()));
         Self::new(start, end)
     }
