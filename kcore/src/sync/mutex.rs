@@ -102,26 +102,26 @@ impl<'a, T: ?Sized> DerefMut for SpinMutexGuard<'a, T> {
 }
 
 #[cfg(feature = "alloc")]
-unsafe impl<A> alloc::alloc::Allocator for SpinMutex<A>
+unsafe impl<A: 'static> alloc::alloc::Allocator for SpinMutex<A>
 where
-    A: alloc::alloc::Allocator,
+    A: kalloc::kalloc::AllocatorMutImpl + 'static,
 {
     fn allocate(
         &self,
         layout: core::alloc::Layout,
     ) -> Result<core::ptr::NonNull<[u8]>, core::alloc::AllocError> {
-        self.lock().allocate(layout)
+        self.lock().allocate_mut(layout)
     }
 
     fn allocate_zeroed(
         &self,
         layout: core::alloc::Layout,
     ) -> Result<core::ptr::NonNull<[u8]>, core::alloc::AllocError> {
-        self.lock().allocate_zeroed(layout)
+        self.lock().allocate_zeroed_mut(layout)
     }
 
     unsafe fn deallocate(&self, ptr: core::ptr::NonNull<u8>, layout: core::alloc::Layout) {
-        self.lock().deallocate(ptr, layout)
+        self.lock().deallocate_mut(ptr, layout)
     }
 
     unsafe fn grow(
@@ -130,7 +130,7 @@ where
         old_layout: core::alloc::Layout,
         new_layout: core::alloc::Layout,
     ) -> Result<core::ptr::NonNull<[u8]>, core::alloc::AllocError> {
-        self.lock().grow(ptr, old_layout, new_layout)
+        self.lock().grow_mut(ptr, old_layout, new_layout)
     }
 
     unsafe fn grow_zeroed(
@@ -139,7 +139,7 @@ where
         old_layout: core::alloc::Layout,
         new_layout: core::alloc::Layout,
     ) -> Result<core::ptr::NonNull<[u8]>, core::alloc::AllocError> {
-        self.lock().grow_zeroed(ptr, old_layout, new_layout)
+        self.lock().grow_zeroed_mut(ptr, old_layout, new_layout)
     }
 
     unsafe fn shrink(
@@ -148,7 +148,7 @@ where
         old_layout: core::alloc::Layout,
         new_layout: core::alloc::Layout,
     ) -> Result<core::ptr::NonNull<[u8]>, core::alloc::AllocError> {
-        self.lock().shrink(ptr, old_layout, new_layout)
+        self.lock().shrink_mut(ptr, old_layout, new_layout)
     }
 
     fn by_ref(&self) -> &Self

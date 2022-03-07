@@ -106,6 +106,7 @@ version = "0.1.0"
 dependencies = [
  "crossbeam-queue",
  "futures-util",
+ "kalloc",
  "libx64",
  "log",
 ]
