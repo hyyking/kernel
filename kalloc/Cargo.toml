@@ -7,5 +7,7 @@ edition = "2021"
 
 [dependencies]
 bitflags = {version="1", default-features=false}
-kcore = {path = "../kcore", features = ["alloc"]}
 libx64 = {path = "../libx64"}
+
+[dev-dependencies]
+kcore = {path = "../kcore"}
