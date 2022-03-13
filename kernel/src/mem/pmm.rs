@@ -5,7 +5,7 @@ use libx64::{
     address::PhysicalAddr,
     paging::{
         frame::{FrameAllocator, FrameError, FrameRange, PhysicalFrame},
-        Page1Gb, Page2Mb, Page4Kb,
+        Page4Kb,
     },
 };
 
@@ -32,7 +32,7 @@ static mut PREALLOC: PreAlloc = PreAlloc([0; PREALLOC_LEN]);
 static mut BINS: [AllocatorBin; BINS_LEN] = [AllocatorBin::new(); BINS_LEN];
 
 pub struct PhysicalMemoryManager {
-    pub buddies: Option<Box<[InnerAllocator]>>,
+    pub buddies: Option<core::mem::ManuallyDrop<Box<[InnerAllocator]>>>,
     pub at: usize,
 }
 
@@ -112,7 +112,7 @@ impl PhysicalMemoryManager {
             buddies[i] = SpinMutex::new(BuddyAllocator::new(chunk, range).unwrap());
         }
 
-        self.buddies = Some(buddies);
+        self.buddies = Some(core::mem::ManuallyDrop::new(buddies));
     }
 }
 
@@ -145,27 +145,12 @@ unsafe impl Allocator for PhysicalMemoryManager {
     }
 }
 
-impl FrameAllocator<Page4Kb> for PhysicalMemoryManager {
-    fn alloc(&mut self) -> Result<PhysicalFrame<Page4Kb>, FrameError> {
-        self.allocate(Layout::new::<[u8; 512]>())
-            .map_err(|_err| FrameError::Alloc)
-            .map(|ptr| PhysicalAddr::from_ptr(ptr.as_ptr() as *mut u8))
-            .map(PhysicalFrame::containing)
-    }
-}
-
-impl FrameAllocator<Page2Mb> for PhysicalMemoryManager {
-    fn alloc(&mut self) -> Result<PhysicalFrame<Page2Mb>, FrameError> {
-        self.allocate(Layout::new::<[u8; 512 * 512 * 2]>())
-            .map_err(|_err| FrameError::Alloc)
-            .map(|ptr| PhysicalAddr::from_ptr(ptr.as_ptr() as *mut u8))
-            .map(PhysicalFrame::containing)
-    }
-}
-
-impl FrameAllocator<Page1Gb> for PhysicalMemoryManager {
-    fn alloc(&mut self) -> Result<PhysicalFrame<Page1Gb>, FrameError> {
-        self.allocate(Layout::new::<[u8; 512 * 512 * 2]>())
+impl<const N: usize> FrameAllocator<N> for PhysicalMemoryManager
+where
+    libx64::paging::PageCheck<N>: libx64::paging::PageSize,
+{
+    fn alloc(&mut self) -> Result<PhysicalFrame<N>, FrameError> {
+        self.allocate(PhysicalFrame::<N>::alloc_layout())
             .map_err(|_err| FrameError::Alloc)
             .map(|ptr| PhysicalAddr::from_ptr(ptr.as_ptr() as *mut u8))
             .map(PhysicalFrame::containing)

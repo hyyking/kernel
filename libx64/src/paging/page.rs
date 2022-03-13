@@ -137,6 +137,17 @@ where
 
     #[inline]
     #[must_use]
+    pub const fn alloc_layout() -> core::alloc::Layout {
+        match N {
+            super::Page4Kb => core::alloc::Layout::new::<[u8; 4 * crate::units::KB]>(),
+            super::Page2Mb => core::alloc::Layout::new::<[u8; 2 * crate::units::MB]>(),
+            super::Page1Gb => core::alloc::Layout::new::<[u8; 1 * crate::units::GB]>(),
+            _ => panic!("unsupported page size"),
+        }
+    }
+
+    #[inline]
+    #[must_use]
     pub const fn ptr(self) -> VirtualAddr {
         self.addr
     }
