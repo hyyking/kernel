@@ -9,14 +9,14 @@ use libx64::{
     },
 };
 
-pub(crate) struct OffsetWalker<const N: u64>
+pub(crate) struct OffsetWalker<const N: usize>
 where
     PageCheck<N>: PageSize,
 {
     offset: VirtualAddr,
 }
 
-impl<const N: u64> OffsetWalker<N>
+impl<const N: usize> OffsetWalker<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -32,7 +32,7 @@ where
     }
 }
 
-impl<const N: u64> FrameTranslator<(), N> for OffsetWalker<N>
+impl<const N: usize> FrameTranslator<(), N> for OffsetWalker<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -45,7 +45,7 @@ where
     }
 }
 
-impl<const N: u64> FrameTranslator<Level4, N> for OffsetWalker<N>
+impl<const N: usize> FrameTranslator<Level4, N> for OffsetWalker<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -58,7 +58,7 @@ where
     }
 }
 
-impl<const N: u64> FrameTranslator<Level3, N> for OffsetWalker<N>
+impl<const N: usize> FrameTranslator<Level3, N> for OffsetWalker<N>
 where
     PageCheck<N>: NotHugePageSize,
 {
@@ -71,7 +71,7 @@ where
     }
 }
 
-impl<const N: u64> FrameTranslator<Level2, N> for OffsetWalker<N>
+impl<const N: usize> FrameTranslator<Level2, N> for OffsetWalker<N>
 where
     PageCheck<N>: NotGiantPageSize,
 {

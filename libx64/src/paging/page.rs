@@ -9,11 +9,15 @@ use crate::{
     },
 };
 
-pub struct TlbFlush<const P: u64>(Page<P>)
+pub trait PageTranslator {
+    fn try_translate(&mut self, addr: VirtualAddr) -> Result<Translation, FrameError>;
+}
+
+pub struct TlbFlush<const P: usize>(Page<P>)
 where
     PageCheck<P>: PageSize;
 
-impl<const P: u64> TlbFlush<P>
+impl<const P: usize> TlbFlush<P>
 where
     PageCheck<P>: PageSize,
 {
@@ -30,11 +34,7 @@ where
     pub fn ignore(self) {}
 }
 
-pub trait PageTranslator {
-    fn try_translate(&mut self, addr: VirtualAddr) -> Result<Translation, FrameError>;
-}
-
-pub trait PageMapper<const N: u64>
+pub trait PageMapper<const N: usize>
 where
     PageCheck<N>: PageSize,
 {
@@ -69,7 +69,7 @@ where
     }
 }
 
-impl<const N: u64, M> PageMapper<N> for &mut M
+impl<const N: usize, M> PageMapper<N> for &mut M
 where
     PageCheck<N>: PageSize,
     M: PageMapper<N>,
@@ -97,39 +97,33 @@ where
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
-pub struct Page<const N: u64>
+pub struct Page<const N: usize>
 where
     PageCheck<N>: PageSize,
 {
     addr: VirtualAddr,
 }
 
-impl<const N: u64> core::iter::Step for Page<N>
+impl<const N: usize> core::iter::Step for Page<N>
 where
     PageCheck<N>: PageSize,
 {
     fn steps_between(start: &Self, end: &Self) -> Option<usize> {
-        usize::try_from((end.addr.as_u64() - start.addr.as_u64()) / N).ok()
+        Some((end.addr.as_usize() - start.addr.as_usize()) / N)
     }
 
     fn forward_checked(start: Self, count: usize) -> Option<Self> {
-        let addr = start
-            .addr
-            .as_u64()
-            .checked_add(N * u64::try_from(count).ok()?)?;
-        Some(Self::containing(VirtualAddr::new(addr)))
+        let addr = start.addr.as_usize().checked_add(N * count)?;
+        Some(Self::containing(VirtualAddr::new(addr as u64)))
     }
 
     fn backward_checked(start: Self, count: usize) -> Option<Self> {
-        let addr = start
-            .addr
-            .as_u64()
-            .checked_sub(N * u64::try_from(count).ok()?)?;
-        Some(Self::containing(VirtualAddr::new(addr)))
+        let addr = start.addr.as_usize().checked_sub(N * count)?;
+        Some(Self::containing(VirtualAddr::new(addr as u64)))
     }
 }
 
-impl<const N: u64> Page<N>
+impl<const N: usize> Page<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -137,7 +131,7 @@ where
     #[must_use]
     pub const fn containing(addr: VirtualAddr) -> Self {
         Self {
-            addr: addr.align_down(N),
+            addr: addr.align_down(N as u64),
         }
     }
 
@@ -148,7 +142,7 @@ where
     }
 
     pub const fn end_ptr(self) -> VirtualAddr {
-        VirtualAddr::new(self.addr.as_u64() + N)
+        VirtualAddr::new((self.addr.as_usize() + N) as u64)
     }
 }
 
@@ -156,7 +150,7 @@ where
 // impl Page<Page2Mb> {}
 // impl Page<Page1Gb> {}
 
-impl<const N: u64> core::fmt::Debug for Page<N>
+impl<const N: usize> core::fmt::Debug for Page<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -171,11 +165,11 @@ where
 }
 
 #[derive(Clone, Eq, PartialEq)]
-pub struct PageRangeInclusive<const N: u64>(core::ops::RangeInclusive<Page<N>>)
+pub struct PageRangeInclusive<const N: usize>(core::ops::RangeInclusive<Page<N>>)
 where
     PageCheck<N>: PageSize;
 
-impl<const N: u64> Iterator for PageRangeInclusive<N>
+impl<const N: usize> Iterator for PageRangeInclusive<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -186,7 +180,7 @@ where
     }
 }
 
-impl<const N: u64> core::ops::RangeBounds<Page<N>> for PageRangeInclusive<N>
+impl<const N: usize> core::ops::RangeBounds<Page<N>> for PageRangeInclusive<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -199,7 +193,7 @@ where
     }
 }
 
-impl<const N: u64> PageRangeInclusive<N>
+impl<const N: usize> PageRangeInclusive<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -238,7 +232,7 @@ where
     #[inline]
     #[must_use]
     pub const fn len(&self) -> usize {
-        ((self.end().as_u64() - self.start().as_u64()) / N) as usize
+        (self.end().as_usize() - self.start().as_usize()) / N
     }
 
     #[inline]
@@ -250,7 +244,10 @@ where
     #[inline]
     #[must_use]
     pub const fn with_size(start: VirtualAddr, size: u64) -> Self {
-        debug_assert!(size % N == 0, "size must be a multiple of the page size");
+        debug_assert!(
+            size % N as u64 == 0,
+            "size must be a multiple of the page size"
+        );
 
         let end = Page::containing(VirtualAddr::new(start.as_u64() + size));
         let start = Page::containing(VirtualAddr::new(start.as_u64()));
@@ -258,7 +255,7 @@ where
     }
 }
 
-impl<const N: u64> core::fmt::Debug for PageRangeInclusive<N>
+impl<const N: usize> core::fmt::Debug for PageRangeInclusive<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -274,11 +271,11 @@ where
 }
 
 #[derive(Clone, Eq, PartialEq)]
-pub struct PageRange<const N: u64>(core::ops::Range<Page<N>>)
+pub struct PageRange<const N: usize>(core::ops::Range<Page<N>>)
 where
     PageCheck<N>: PageSize;
 
-impl<const N: u64> Iterator for PageRange<N>
+impl<const N: usize> Iterator for PageRange<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -289,7 +286,7 @@ where
     }
 }
 
-impl<const N: u64> core::ops::RangeBounds<Page<N>> for PageRange<N>
+impl<const N: usize> core::ops::RangeBounds<Page<N>> for PageRange<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -302,7 +299,7 @@ where
     }
 }
 
-impl<const N: u64> PageRange<N>
+impl<const N: usize> PageRange<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -341,7 +338,7 @@ where
     #[inline]
     #[must_use]
     pub const fn len(&self) -> usize {
-        ((self.end().as_u64() - self.start().as_u64()) / N) as usize
+        self.end().as_usize() - self.start().as_usize() / N
     }
 
     #[inline]
@@ -353,7 +350,10 @@ where
     #[inline]
     #[must_use]
     pub const fn with_size(start: VirtualAddr, size: u64) -> Self {
-        debug_assert!(size % N == 0, "size must be a multiple of the page size");
+        debug_assert!(
+            size % N as u64 == 0,
+            "size must be a multiple of the page size"
+        );
 
         let end = Page::containing(VirtualAddr::new(start.as_u64() + size + 1));
         let start = Page::containing(VirtualAddr::new(start.as_u64()));
@@ -361,7 +361,7 @@ where
     }
 }
 
-impl<const N: u64> core::fmt::Debug for PageRange<N>
+impl<const N: usize> core::fmt::Debug for PageRange<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -400,12 +400,16 @@ mod test {
     #[test]
     fn inclusive() {
         assert_eq!(
-            PageRangeInclusive::<Page4Kb>::new_addr(VirtualAddr::new(0), VirtualAddr::new(Page4Kb))
-                .count(),
+            PageRangeInclusive::<Page4Kb>::new_addr(
+                VirtualAddr::new(0),
+                VirtualAddr::new(Page4Kb as u64)
+            )
+            .count(),
             2
         );
         assert_eq!(
-            PageRange::<Page4Kb>::new_addr(VirtualAddr::new(0), VirtualAddr::new(Page4Kb)).count(),
+            PageRange::<Page4Kb>::new_addr(VirtualAddr::new(0), VirtualAddr::new(Page4Kb as u64))
+                .count(),
             1
         );
     }

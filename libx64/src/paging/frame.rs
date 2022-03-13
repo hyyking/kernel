@@ -9,7 +9,7 @@ use crate::{
     },
 };
 
-pub trait FrameAllocator<const N: u64>
+pub trait FrameAllocator<const N: usize>
 where
     PageCheck<N>: PageSize,
 {
@@ -19,7 +19,7 @@ where
     fn alloc(&mut self) -> Result<PhysicalFrame<N>, FrameError>;
 }
 
-pub trait FrameTranslator<L, const N: u64>
+pub trait FrameTranslator<L, const N: usize>
 where
     PageCheck<N>: PageSize,
     L: PageLevel,
@@ -42,14 +42,14 @@ pub enum FrameError {
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
-pub struct PhysicalFrame<const N: u64>
+pub struct PhysicalFrame<const N: usize>
 where
     PageCheck<N>: PageSize,
 {
     addr: PhysicalAddr,
 }
 
-impl<const N: u64> PhysicalFrame<N>
+impl<const N: usize> PhysicalFrame<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -57,7 +57,7 @@ where
     #[must_use]
     pub const fn containing(addr: PhysicalAddr) -> Self {
         Self {
-            addr: addr.align_down(N),
+            addr: addr.align_down(N as u64),
         }
     }
 
@@ -68,32 +68,26 @@ where
     }
 }
 
-impl<const N: u64> core::iter::Step for PhysicalFrame<N>
+impl<const N: usize> core::iter::Step for PhysicalFrame<N>
 where
     PageCheck<N>: PageSize,
 {
     fn steps_between(start: &Self, end: &Self) -> Option<usize> {
-        usize::try_from((end.addr.as_u64() - start.addr.as_u64()) / N).ok()
+        Some((end.addr.as_usize() - start.addr.as_usize()) / N)
     }
 
     fn forward_checked(start: Self, count: usize) -> Option<Self> {
-        let addr = start
-            .addr
-            .as_u64()
-            .checked_add(N * u64::try_from(count).ok()?)?;
-        Some(Self::containing(PhysicalAddr::new(addr)))
+        let addr = start.addr.as_usize().checked_add(N * count)?;
+        Some(Self::containing(PhysicalAddr::new(addr as u64)))
     }
 
     fn backward_checked(start: Self, count: usize) -> Option<Self> {
-        let addr = start
-            .addr
-            .as_u64()
-            .checked_sub(N * u64::try_from(count).ok()?)?;
-        Some(Self::containing(PhysicalAddr::new(addr)))
+        let addr = start.addr.as_usize().checked_sub(N * count)?;
+        Some(Self::containing(PhysicalAddr::new(addr as u64)))
     }
 }
 
-impl<const N: u64> core::fmt::Debug for PhysicalFrame<N>
+impl<const N: usize> core::fmt::Debug for PhysicalFrame<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -108,11 +102,11 @@ where
 }
 
 #[derive(Clone, Eq, PartialEq)]
-pub struct FrameRangeInclusive<const N: u64>(core::ops::RangeInclusive<PhysicalFrame<N>>)
+pub struct FrameRangeInclusive<const N: usize>(core::ops::RangeInclusive<PhysicalFrame<N>>)
 where
     PageCheck<N>: PageSize;
 
-impl<const N: u64> Iterator for FrameRangeInclusive<N>
+impl<const N: usize> Iterator for FrameRangeInclusive<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -123,7 +117,7 @@ where
     }
 }
 
-impl<const N: u64> core::ops::RangeBounds<PhysicalFrame<N>> for FrameRangeInclusive<N>
+impl<const N: usize> core::ops::RangeBounds<PhysicalFrame<N>> for FrameRangeInclusive<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -136,7 +130,7 @@ where
     }
 }
 
-impl<const N: u64> FrameRangeInclusive<N>
+impl<const N: usize> FrameRangeInclusive<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -178,7 +172,7 @@ where
     #[inline]
     #[must_use]
     pub const fn len(&self) -> usize {
-        ((self.end().as_u64() - self.start().as_u64()) / N) as usize
+        (self.end().as_usize() - self.start().as_usize()) / N
     }
 
     #[inline]
@@ -190,15 +184,17 @@ where
     #[inline]
     #[must_use]
     pub const fn with_size(start: PhysicalAddr, size: u64) -> Self {
-        debug_assert!(size % N == 0, "size must be a multiple of the page size");
-
+        debug_assert!(
+            size % N as u64 == 0,
+            "size must be a multiple of the page size"
+        );
         let end = PhysicalFrame::containing(PhysicalAddr::new(start.as_u64() + size));
         let start = PhysicalFrame::containing(PhysicalAddr::new(start.as_u64()));
         Self::new(start, end)
     }
 }
 
-impl<const N: u64> core::fmt::Debug for FrameRangeInclusive<N>
+impl<const N: usize> core::fmt::Debug for FrameRangeInclusive<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -214,11 +210,11 @@ where
 }
 
 #[derive(Clone, Eq, PartialEq)]
-pub struct FrameRange<const N: u64>(core::ops::Range<PhysicalFrame<N>>)
+pub struct FrameRange<const N: usize>(core::ops::Range<PhysicalFrame<N>>)
 where
     PageCheck<N>: PageSize;
 
-impl<const N: u64> Iterator for FrameRange<N>
+impl<const N: usize> Iterator for FrameRange<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -229,7 +225,7 @@ where
     }
 }
 
-impl<const N: u64> core::ops::RangeBounds<PhysicalFrame<N>> for FrameRange<N>
+impl<const N: usize> core::ops::RangeBounds<PhysicalFrame<N>> for FrameRange<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -242,7 +238,7 @@ where
     }
 }
 
-impl<const N: u64> FrameRange<N>
+impl<const N: usize> FrameRange<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -284,7 +280,7 @@ where
     #[inline]
     #[must_use]
     pub const fn len(&self) -> usize {
-        ((self.end().as_u64() - self.start().as_u64()) / N) as usize
+        (self.end().as_usize() - self.start().as_usize()) / N
     }
 
     #[inline]
@@ -296,7 +292,10 @@ where
     #[inline]
     #[must_use]
     pub const fn with_size(start: PhysicalAddr, size: u64) -> Self {
-        debug_assert!(size % N == 0, "size must be a multiple of the page size");
+        debug_assert!(
+            size % N as u64 == 0,
+            "size must be a multiple of the page size"
+        );
 
         let end = PhysicalFrame::containing(PhysicalAddr::new(start.as_u64() + size + 1));
         let start = PhysicalFrame::containing(PhysicalAddr::new(start.as_u64()));
@@ -304,7 +303,7 @@ where
     }
 }
 
-impl<const N: u64> core::fmt::Debug for FrameRange<N>
+impl<const N: usize> core::fmt::Debug for FrameRange<N>
 where
     PageCheck<N>: PageSize,
 {
@@ -345,14 +344,17 @@ mod test {
         assert_eq!(
             FrameRangeInclusive::<Page4Kb>::new_addr(
                 PhysicalAddr::new(0),
-                PhysicalAddr::new(Page4Kb)
+                PhysicalAddr::new(Page4Kb as u64)
             )
             .count(),
             2
         );
         assert_eq!(
-            FrameRange::<Page4Kb>::new_addr(PhysicalAddr::new(0), PhysicalAddr::new(Page4Kb))
-                .count(),
+            FrameRange::<Page4Kb>::new_addr(
+                PhysicalAddr::new(0),
+                PhysicalAddr::new(Page4Kb as u64)
+            )
+            .count(),
             1
         );
     }

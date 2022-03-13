@@ -127,7 +127,7 @@ pub fn set_up_mappings(
     let stack_start_addr = kernel_stack_start_location(&mut used_entries);
     let stack_start = Page::<Page4Kb>::containing(stack_start_addr);
     let stack_end = {
-        let stack_size = CONFIG.kernel_stack_size.unwrap_or(20 * Page4Kb);
+        let stack_size = CONFIG.kernel_stack_size.unwrap_or(20 * Page4Kb as u64);
         let end_addr = stack_start_addr + stack_size;
         Page::<Page4Kb>::containing(end_addr)
     };
@@ -153,7 +153,7 @@ pub fn set_up_mappings(
         VirtualAddr::from_ptr(context_switch as *const ())
     );
     // Allocate two page for the context switch
-    for frame in FrameRange::<Page4Kb>::with_size(context_switch_function, 2 * Page4Kb) {
+    for frame in FrameRange::<Page4Kb>::with_size(context_switch_function, 2 * Page4Kb as u64) {
         kernel_page_table
             .id_map(frame, Flags::PRESENT, frame_allocator)
             .map(TlbFlush::flush)?
@@ -171,8 +171,7 @@ pub fn set_up_mappings(
 
         let start_page = Page::<Page4Kb>::containing(frame_buffer_location(&mut used_entries));
         for (i, frame) in framebuffer_phys_range.enumerate() {
-            let offset = u64::try_from(i).unwrap() * Page4Kb;
-            let page = Page::<Page4Kb>::containing(start_page.ptr() + offset);
+            let page = Page::<Page4Kb>::containing(start_page.ptr() + i * Page4Kb);
             kernel_page_table
                 .map(page, frame, Flags::PRESENT | Flags::RW, frame_allocator)
                 .map(TlbFlush::flush)?

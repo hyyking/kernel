@@ -3,7 +3,7 @@ use core::pin::Pin;
 
 use crate::{
     address::VirtualAddr,
-    units::bits::{Gb, Kb, Mb},
+    units::{Gb, Kb, Mb},
 };
 
 pub mod entry;
@@ -15,15 +15,15 @@ pub type PinTableMut<'a, L> = Pin<&'a mut table::PageTable<L>>;
 pub type PinEntryMut<'a, L> = Pin<&'a mut entry::PageEntry<L>>;
 
 #[allow(non_upper_case_globals)]
-pub const Page4Kb: u64 = 4 * Kb;
+pub const Page4Kb: usize = 4 * Kb;
 
 #[allow(non_upper_case_globals)]
-pub const Page2Mb: u64 = 2 * Mb;
+pub const Page2Mb: usize = 2 * Mb;
 
 #[allow(non_upper_case_globals)]
-pub const Page1Gb: u64 = Gb;
+pub const Page1Gb: usize = Gb;
 
-pub const fn pretty_pagesize(n: u64) -> &'static str {
+pub const fn pretty_pagesize(n: usize) -> &'static str {
     #[allow(non_upper_case_globals)]
     match n {
         Page4Kb => "4Kb",
@@ -37,7 +37,7 @@ pub trait PageSize {}
 pub trait NotHugePageSize: PageSize {}
 pub trait NotGiantPageSize: PageSize {}
 
-pub struct PageCheck<const N: u64>;
+pub struct PageCheck<const N: usize>;
 
 impl NotHugePageSize for PageCheck<Page4Kb> {}
 impl NotHugePageSize for PageCheck<Page1Gb> {}

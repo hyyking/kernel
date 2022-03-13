@@ -112,7 +112,7 @@ fn bootloader_main(
     let mut bootloader_page_table = OffsetMapper::new(phys_offset);
 
     // identity-map remaining physical memory (first gigabyte is already identity-mapped)
-    let start_frame = PhysicalFrame::<Page2Mb>::containing(PhysicalAddr::new(Page1Gb));
+    let start_frame = PhysicalFrame::<Page2Mb>::containing(PhysicalAddr::new(Page1Gb as u64));
     let end_frame = PhysicalFrame::<Page2Mb>::containing(max_phys_addr);
     for frame in FrameRange::new(start_frame, end_frame) {
         bootloader_page_table

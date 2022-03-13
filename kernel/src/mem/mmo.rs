@@ -10,7 +10,7 @@ use libx64::paging::{
     Page4Kb, PageCheck, PageSize,
 };
 
-pub struct MemoryMappedObject<T, const P: u64>
+pub struct MemoryMappedObject<T, const P: usize>
 where
     PageCheck<P>: PageSize,
 {
@@ -18,7 +18,7 @@ where
     pages: PageRangeInclusive<P>,
 }
 
-impl<T, const P: u64> MemoryMappedObject<T, P>
+impl<T, const P: usize> MemoryMappedObject<T, P>
 where
     PageCheck<P>: PageSize,
 {
@@ -38,7 +38,7 @@ where
     }
 }
 
-impl<T, const N: u64> MemoryMappedObject<T, N>
+impl<T, const N: usize> MemoryMappedObject<T, N>
 where
     PageCheck<N>: PageSize,
 {
@@ -78,7 +78,7 @@ where
     }
 }
 
-unsafe impl<T, const P: u64> GlobalAlloc for MemoryMappedObject<T, P>
+unsafe impl<T, const P: usize> GlobalAlloc for MemoryMappedObject<T, P>
 where
     T: Allocator,
     PageCheck<P>: PageSize,
@@ -123,7 +123,7 @@ where
     }
 }
 
-unsafe impl<T, const P: u64> Allocator for MemoryMappedObject<T, P>
+unsafe impl<T, const P: usize> Allocator for MemoryMappedObject<T, P>
 where
     T: Allocator,
     PageCheck<P>: PageSize,

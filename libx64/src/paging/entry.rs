@@ -277,7 +277,7 @@ impl PageEntry<Level2> {
     ///
     /// The address must a valid page
     #[inline]
-    pub unsafe fn set_frame<const N: u64>(self: Pin<&mut Self>, addr: PhysicalFrame<N>)
+    pub unsafe fn set_frame<const N: usize>(self: Pin<&mut Self>, addr: PhysicalFrame<N>)
     where
         PageCheck<N>: NotGiantPageSize, // 4Kb or 2Mb
     {
@@ -312,7 +312,7 @@ impl PageEntry<Level3> {
     ///
     /// The address must a valid page
     #[inline]
-    pub unsafe fn set_frame<const N: u64>(self: Pin<&mut Self>, addr: PhysicalFrame<N>)
+    pub unsafe fn set_frame<const N: usize>(self: Pin<&mut Self>, addr: PhysicalFrame<N>)
     where
         PageCheck<N>: NotHugePageSize, // 4Kb or 1Gb
     {

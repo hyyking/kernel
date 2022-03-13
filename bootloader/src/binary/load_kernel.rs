@@ -47,7 +47,7 @@ where
     ) -> Result<Self, &'static str> {
         let kernel_offset = PhysicalAddr::new(&bytes[0] as *const u8 as u64);
         info!("Elf file loaded at {:?}", kernel_offset);
-        if !kernel_offset.is_aligned(Page4Kb) {
+        if !kernel_offset.is_aligned(Page4Kb as u64) {
             return Err("Loaded kernel ELF file is not sufficiently aligned");
         }
 
@@ -144,7 +144,7 @@ where
         let phys_start_addr = self.kernel_offset + segment.offset();
         let start_frame = PhysicalFrame::<Page4Kb>::containing(phys_start_addr);
         let end_frame = PhysicalFrame::<Page4Kb>::containing(
-            (phys_start_addr + segment.file_size()).align_up(Page4Kb),
+            (phys_start_addr + segment.file_size()).align_up(Page4Kb as u64),
         );
 
         let virt_start_addr =
@@ -203,7 +203,7 @@ where
 
         // In some cases, `zero_start` might not be page-aligned. This requires some
         // special treatment because we can't safely zero a frame of the original file.
-        let data_bytes_before_zero = zero_start.as_u64() & 0xfff;
+        let data_bytes_before_zero = zero_start.as_usize() & 0xfff;
         if data_bytes_before_zero != 0 {
             // The last non-bss frame of the segment consists partly of data and partly of bss
             // memory, which must be zeroed. Unfortunately, the file representation might have
@@ -239,16 +239,17 @@ where
             let new_bytes_ptr = new_frame.ptr().as_u64() as *mut u8;
             unsafe {
                 core::ptr::write_bytes(
-                    new_bytes_ptr.add(data_bytes_before_zero as usize),
+                    new_bytes_ptr.add(data_bytes_before_zero),
                     0,
-                    (Page4Kb - data_bytes_before_zero) as usize,
+                    Page4Kb - data_bytes_before_zero,
                 );
             }
         }
 
         // map additional frames for `.bss` memory that is not present in source file
-        let start_page =
-            Page::<Page4Kb>::containing(VirtualAddr::new(zero_start.as_u64()).align_up(Page4Kb));
+        let start_page = Page::<Page4Kb>::containing(
+            VirtualAddr::new(zero_start.as_u64()).align_up(Page4Kb as u64),
+        );
         let end_page = Page::<Page4Kb>::containing(zero_end);
         for page in PageRangeInclusive::new(start_page, end_page) {
             // allocate a new unused frame

@@ -10,7 +10,7 @@ use crate::{
     },
 };
 
-#[repr(C, align(4096))]
+#[repr(C, align(512))]
 pub struct PageTable<LEVEL: PageLevel> {
     entries: [PageEntry<LEVEL>; 512],
     _m: core::marker::PhantomData<LEVEL>,

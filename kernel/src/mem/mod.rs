@@ -3,7 +3,6 @@ use alloc::alloc::Layout;
 pub mod context;
 pub mod galloc;
 pub mod mmo;
-pub mod pagealloc;
 pub mod pmm;
 
 #[alloc_error_handler]

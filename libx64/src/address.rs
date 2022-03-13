@@ -40,6 +40,12 @@ impl VirtualAddr {
 
     #[inline]
     #[must_use]
+    pub const fn as_usize(self) -> usize {
+        self.0 as usize
+    }
+
+    #[inline]
+    #[must_use]
     pub const fn null() -> Self {
         Self(0)
     }
@@ -111,6 +117,12 @@ impl PhysicalAddr {
     #[must_use]
     pub const fn as_u64(&self) -> u64 {
         self.0
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn as_usize(&self) -> usize {
+        self.0 as usize
     }
 
     #[inline]

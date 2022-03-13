@@ -29,10 +29,10 @@ use libx64::{
         page::{Page, PageRangeInclusive, PageTranslator},
         Page4Kb,
     },
-    units::bits::Kb,
+    units::Kb,
 };
 
-use crate::mem::{context::MemoryLayout, pagealloc::BootInfoFrameAllocator};
+use crate::mem::{context::MemoryLayout, pmm::PhysicalMemoryManager};
 
 #[macro_use]
 mod infra;
@@ -53,7 +53,7 @@ pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
     let mut context = crate::mem::context::MemoryContext::new(
         MemoryLayout::init(&bi.memory_regions).expect("memory layout"),
         page_mapper::OffsetMapper::new(pmo),
-        BootInfoFrameAllocator::init(&bi.memory_regions),
+        PhysicalMemoryManager::init(&bi.memory_regions),
     );
 
     dbg!(context.layout().usable.len());

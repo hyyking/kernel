@@ -12,7 +12,7 @@ use libx64::{
 
 use crate::Translation;
 
-pub(crate) trait WalkResultExt<'a, T, L, const N: u64>
+pub(crate) trait WalkResultExt<'a, T, L, const N: usize>
 where
     PageCheck<N>: PageSize,
     T: FrameTranslator<L::Prev, Page4Kb>,
@@ -40,7 +40,7 @@ impl<'a, T, L> WalkError<'a, T, L> {
     }
 }
 
-pub(crate) struct PageWalker<T, const N: u64>
+pub(crate) struct PageWalker<T, const N: usize>
 where
     PageCheck<N>: PageSize,
 {
@@ -48,7 +48,7 @@ where
     translator: T,
 }
 
-impl<T, const N: u64> PageWalker<T, N>
+impl<T, const N: usize> PageWalker<T, N>
 where
     PageCheck<N>: PageSize,
     T: FrameTranslator<(), Page4Kb>,
@@ -64,7 +64,7 @@ where
     }
 }
 
-impl<T, const N: u64> PageWalker<T, N>
+impl<T, const N: usize> PageWalker<T, N>
 where
     PageCheck<N>: NotHugePageSize + NotGiantPageSize,
     T: FrameTranslator<(), Page4Kb>
