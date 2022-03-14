@@ -198,8 +198,8 @@ where
         let zero_end = virt_start_addr + mem_size;
 
         // a type alias that helps in efficiently clearing a page
-        type PageArray = [u64; Page4Kb as usize / 8];
-        const ZERO_ARRAY: PageArray = [0; Page4Kb as usize / 8];
+        type PageArray = [u64; Page4Kb / 8];
+        const ZERO_ARRAY: PageArray = [0; Page4Kb / 8];
 
         // In some cases, `zero_start` might not be page-aligned. This requires some
         // special treatment because we can't safely zero a frame of the original file.

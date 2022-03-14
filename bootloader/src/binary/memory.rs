@@ -37,9 +37,9 @@ pub struct E820MemoryMap<'a> {
 
 #[derive(Debug)]
 /// A physical frame allocator based on a BIOS provided memory map.
-pub struct BiosFrameAllocator {
+pub struct BiosFrameAllocator<'a> {
     /// E820MemoryMap
-    memory_map: E820MemoryMap<'static>,
+    memory_map: E820MemoryMap<'a>,
     current_descriptor: Option<E820MemoryRegion>,
     idx: usize,
     local_map: PhysicalFrame<Page4Kb>,
@@ -96,10 +96,10 @@ impl<'a> E820MemoryMap<'a> {
     }
 }
 
-impl BiosFrameAllocator {
+impl<'a> BiosFrameAllocator<'a> {
     /// Creates a new frame allocator based on the given legacy memory regions. Skips any frames
     /// before the given `frame`.
-    pub fn new(memory_map: E820MemoryMap<'static>) -> Result<Self, FrameError> {
+    pub fn new(memory_map: E820MemoryMap<'a>) -> Result<Self, FrameError> {
         let mut this = Self {
             memory_map,
             idx: 0,
@@ -127,12 +127,12 @@ impl BiosFrameAllocator {
     }
 
     /// References the underlying memory map
-    pub fn memory_map(&self) -> &E820MemoryMap<'static> {
+    pub fn memory_map(&self) -> &E820MemoryMap<'a> {
         &self.memory_map
     }
 
     /// Consume the allocator to return the memory map, useful to create bootinfo memory map
-    pub fn into_memory_map(self) -> E820MemoryMap<'static> {
+    pub fn into_memory_map(self) -> E820MemoryMap<'a> {
         self.memory_map
     }
 
@@ -169,7 +169,7 @@ impl BiosFrameAllocator {
     }
 }
 
-impl FrameAllocator<Page4Kb> for BiosFrameAllocator {
+impl<'a> FrameAllocator<Page4Kb> for BiosFrameAllocator<'a> {
     fn alloc(&mut self) -> Result<PhysicalFrame<Page4Kb>, FrameError> {
         if let Some(current_descriptor) = self.current_descriptor {
             match self.allocate_frame_from_descriptor(current_descriptor) {

@@ -1,6 +1,5 @@
 use core::{
     arch::asm,
-    convert::TryFrom,
     mem::{self, MaybeUninit},
     slice,
 };
@@ -24,6 +23,8 @@ use libx64::paging::{
 use page_mapper::OffsetMapper;
 
 mod gdt;
+
+pub mod bootloader;
 
 /// Provides a type to keep track of used entries in a level 4 page table.
 pub mod level_4_entries;
@@ -146,14 +147,14 @@ pub fn set_up_mappings(
 
     // identity-map context switch function, so that we don't get an immediate pagefault
     // after switching the active page table
-    let context_switch_function = PhysicalAddr::new(context_switch as *const () as u64);
+    let context_switch_function = PhysicalAddr::from_ptr(context_switch as *const ());
     info!("Entry point at {:?}", entry_point);
     info!(
         "Mapping context switch at {:?}",
         VirtualAddr::from_ptr(context_switch as *const ())
     );
-    // Allocate two page for the context switch
-    for frame in FrameRange::<Page4Kb>::with_size(context_switch_function, 2 * Page4Kb as u64) {
+    // Allocate the context switch
+    for frame in FrameRange::<Page4Kb>::with_size(context_switch_function, 1 * Page4Kb as u64) {
         kernel_page_table
             .id_map(frame, Flags::PRESENT, frame_allocator)
             .map(TlbFlush::flush)?
@@ -323,13 +324,10 @@ pub fn switch_to_kernel(
     mappings: Mappings,
     boot_info: &'static mut BootInfo,
 ) -> ! {
-    let PageTables {
-        kernel_level_4_frame,
-        ..
-    } = page_tables;
+    let PageTables { mut kernel, .. } = page_tables;
 
     let addresses = Addresses {
-        page_table: kernel_level_4_frame,
+        page_table: PhysicalFrame::<Page4Kb>::containing_ptr(kernel.level4().as_ref().get_ref()),
         stack_top: mappings.stack_end.ptr(),
         entry_point: mappings.entry_point,
         boot_info,
@@ -351,12 +349,6 @@ pub struct PageTables {
     pub bootloader: OffsetMapper,
     /// Provides access to the page tables of the kernel address space (not active).
     pub kernel: OffsetMapper,
-    /// The physical frame where the level 4 page table of the kernel address space is stored.
-    ///
-    /// Must be the page table that the `kernel` field of this struct refers to.
-    ///
-    /// This frame is loaded into the `CR3` register on the final context switch to the kernel.  
-    pub kernel_level_4_frame: PhysicalFrame<Page4Kb>,
 }
 
 /// Performs the actual context switch.
