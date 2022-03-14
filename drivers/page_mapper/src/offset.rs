@@ -9,7 +9,7 @@ use libx64::{
     },
 };
 
-pub(crate) struct OffsetWalker<const N: usize>
+pub struct OffsetWalker<const N: usize>
 where
     PageCheck<N>: PageSize,
 {
@@ -21,7 +21,6 @@ where
     PageCheck<N>: PageSize,
 {
     pub(crate) const fn new(offset: VirtualAddr) -> Self {
-        debug_assert!(!offset.is_null());
         Self { offset }
     }
 

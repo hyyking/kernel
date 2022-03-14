@@ -10,9 +10,9 @@ use libx64::{
     address::VirtualAddr,
     paging::{
         entry::Flags,
-        frame::{FrameAllocator, FrameError, PhysicalFrame},
+        frame::{FrameAllocator, FrameError, FrameTranslator, PhysicalFrame},
         page::{Page, PageMapper, PageTranslator, TlbFlush},
-        table::{Level1, Level2, Level3, Level4, PageTable, Translation},
+        table::{Level1, Level2, Level3, Level4, PageLevel, Translation},
         Page1Gb, Page2Mb, Page4Kb, PinTableMut,
     },
 };
@@ -23,6 +23,7 @@ use crate::{
 };
 
 pub struct OffsetMapper {
+    offset: VirtualAddr,
     walker: PageWalker<OffsetWalker<Page4Kb>, Page4Kb>,
 }
 
@@ -30,13 +31,23 @@ impl OffsetMapper {
     #[must_use]
     pub fn new(offset: VirtualAddr) -> Self {
         Self {
+            offset,
             walker: PageWalker::new(OffsetWalker::new(offset)),
         }
     }
 
+    pub const fn offset(&self) -> VirtualAddr {
+        self.offset
+    }
+
+    pub fn translator(&self) -> &OffsetWalker<Page4Kb> {
+        self.walker.translator()
+    }
+
     #[must_use]
-    pub unsafe fn from_p4(level4: &mut PageTable<Level4>, offset: VirtualAddr) -> Self {
+    pub unsafe fn from_p4(level4: PinTableMut<'_, Level4>, offset: VirtualAddr) -> Self {
         Self {
+            offset,
             walker: PageWalker::new_with_level4(OffsetWalker::new(offset), level4),
         }
     }
@@ -314,5 +325,15 @@ impl PageMapper<Page1Gb> for OffsetMapper {
             entry.as_mut().clear();
         }
         Ok(TlbFlush::new(page))
+    }
+}
+
+impl FrameTranslator<(), Page4Kb> for OffsetMapper {
+    #[inline]
+    unsafe fn translate_frame<'a>(
+        &self,
+        frame: PhysicalFrame<Page4Kb>,
+    ) -> PinTableMut<'a, <() as PageLevel>::Next> {
+        FrameTranslator::<(), Page4Kb>::translate_frame(self.translator(), frame)
     }
 }

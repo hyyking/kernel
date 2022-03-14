@@ -55,11 +55,15 @@ where
 {
     pub(crate) fn new(translator: T) -> Self {
         let level4 = PageTable::new(libx64::control::cr3(), &translator);
-        unsafe { Self::new_with_level4(translator, level4.get_unchecked_mut()) }
+        unsafe { Self::new_with_level4(translator, level4) }
     }
 
-    pub(crate) fn new_with_level4(translator: T, level4: &mut PageTable<Level4>) -> Self {
-        let level4 = NonNull::from(level4);
+    pub fn translator(&self) -> &T {
+        &self.translator
+    }
+
+    pub(crate) unsafe fn new_with_level4(translator: T, level4: PinTableMut<'_, Level4>) -> Self {
+        let level4 = NonNull::from(level4.get_unchecked_mut());
         Self { translator, level4 }
     }
 }
