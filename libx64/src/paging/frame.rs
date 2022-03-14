@@ -63,6 +63,14 @@ where
 
     #[inline]
     #[must_use]
+    pub fn containing_ptr<T>(addr: *const T) -> Self {
+        Self {
+            addr: PhysicalAddr::from_ptr(addr).align_down(N as u64),
+        }
+    }
+
+    #[inline]
+    #[must_use]
     pub const fn alloc_layout() -> core::alloc::Layout {
         match N {
             super::Page4Kb => core::alloc::Layout::new::<[u8; 4 * crate::units::KB]>(),

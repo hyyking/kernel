@@ -51,6 +51,14 @@ impl<LEVEL: PageLevel> PageTable<LEVEL> {
         unsafe { self.map_unchecked_mut(|page| page[idx].assume_init_mut()) }
     }
 
+    pub unsafe fn clear(mut self: Pin<&mut Self>) {
+        for i in 0..512 {
+            self.as_mut()
+                .index_pin_mut(PageTableIndex::new_truncate(i))
+                .clear();
+        }
+    }
+
     /// Get a reference to the page table's entries.
     pub fn entries(&self) -> &[PageEntry<LEVEL>; 512] {
         &self.entries

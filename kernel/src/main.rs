@@ -19,18 +19,7 @@ extern crate alloc;
 
 use core::panic::PanicInfo;
 
-use crate::mem::mmo::MemoryMappedObject;
-use kalloc::slab::SlabPage;
-use kcore::sync::SpinMutex;
-
-use libx64::{
-    address::VirtualAddr,
-    paging::{
-        page::{Page, PageRangeInclusive, PageTranslator},
-        Page4Kb,
-    },
-    units::Kb,
-};
+use libx64::{address::VirtualAddr, paging::page::PageTranslator};
 
 use crate::mem::{context::MemoryLayout, pmm::PhysicalMemoryManager};
 
@@ -40,7 +29,6 @@ mod init;
 pub mod mem;
 
 bootloader::entry_point!(kmain);
-
 pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
     qemu_logger::init().expect("unable to initialize logger");
     info!("kernel loaded");
@@ -108,13 +96,11 @@ pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
     #[cfg(test)]
     test_main();
 
-    // kprintln!("didn't crash");
     libx64::diverging_hlt();
 }
 
 #[panic_handler]
 fn ph(info: &PanicInfo) -> ! {
-    // kprintln!("[PANIC]: {}", info);
     error!("PANIC => {}", info);
     libx64::diverging_hlt();
 }
