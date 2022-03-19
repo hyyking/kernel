@@ -33,6 +33,7 @@ macro_rules! wait_for {
     };
 }
 
+#[derive(Debug)]
 pub struct SerialPort {
     data: RWPort<u8>,
     int_en: WPort<u8>,
