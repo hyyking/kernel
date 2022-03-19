@@ -182,7 +182,7 @@ fn create_page_tables(frame_allocator: &mut impl FrameAllocator<Page4Kb>) -> Pag
         let kernel = unsafe {
             let ptr = addr.ptr().unwrap().as_mut();
             *ptr = PageTable::new_zero();
-            OffsetMapper::from_p4(ptr, phys_offset)
+            OffsetMapper::from_p4(core::pin::Pin::new_unchecked(ptr), phys_offset)
         };
         (kernel, frame)
     };

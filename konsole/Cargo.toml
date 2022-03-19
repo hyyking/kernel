@@ -1,0 +1,28 @@
+[package]
+name = "konsole"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies.bytes]
+version = "1"
+
+[dependencies.protocols]
+path = "../protocols"
+features = ["log", "alloc"]
+default-features=false
+
+[dependencies.tokio]
+version = "1"
+features = ["net", "rt", "macros", "io-util", "io-std"]
+default-features=false
+
+[dependencies.tokio-util]
+version = "0.7"
+features = ["codec"]
+default-features=false
+
+[dependencies.rkyv]
+features = ["size_32", "strict"]
+version = "0.7"

@@ -1,10 +1,19 @@
-KERNELIMG := "target/kernel.img"
 export KERNEL_MANIFEST := `find $(pwd -P)/kernel -type f -name Cargo.toml`
 
+KERNELIMG := "target/kernel.img"
 QEMU_ARGS := "-enable-kvm -cpu host -drive format=raw,file=" + KERNELIMG
+SERIAL_ADDR := "127.0.0.1:8000"
 
-run: image 
-    qemu-system-x86_64 {{QEMU_ARGS}} -serial stdio
+#cargo r --bin konsole &
+#sleep 0.5
+run: konsole image  
+    cargo run --bin konsole -- {{SERIAL_ADDR}} &
+    sleep 0.5
+    qemu-system-x86_64 {{QEMU_ARGS}} -serial tcp:{{SERIAL_ADDR}}
+#nc -l 8000 &
+
+@konsole:
+    cargo build --bin konsole
 
 run-debug: image 
     qemu-system-x86_64 {{QEMU_ARGS}} -d int,cpu_reset -no-reboot -serial stdio
@@ -26,6 +35,6 @@ image: kernel bootloader
     cd kernel && cargo build
     printf "\e[32;1m[1/3] Kernel build successful\n\e[0m"
 
-@bootloader $KERNEL=`find ~+ -type f -name kernel` $RUSTFLAGS="-C opt-level=s":
+@bootloader $KERNEL=`find ~+ -type f -name kernel` $RUSTFLAGS="-C opt-level=z":
     cd bootloader && cargo build --bin bios --release --features bios_bin 
     printf "\e[32;1m[2/3] Bootloader build successful\n\e[0m"
