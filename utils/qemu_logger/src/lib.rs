@@ -1,21 +1,80 @@
 #![no_std]
 
-use core::fmt::Write;
-
 use kcore::{klazy, sync::SpinMutex};
+use protocols::log::{Level, LogHeader, LogMessage, SIZE_PAD};
 use serialuart16550::SerialPort;
+
+use rkyv::{
+    ser::{
+        serializers::{BufferScratch, BufferSerializer, CompositeSerializer, ScratchTracker},
+        Serializer,
+    },
+    AlignedBytes,
+};
+
+struct PortSerializer {
+    port: SerialPort,
+    pos: usize,
+}
+
+struct RkyvLogger {
+    ser: PortSerializer,
+    buffer: AlignedBytes<512>,
+    scratch: AlignedBytes<512>,
+}
+
+impl rkyv::Fallible for PortSerializer {
+    type Error = ();
+}
+
+impl Serializer for PortSerializer {
+    fn pos(&self) -> usize {
+        self.pos
+    }
+
+    fn write(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
+        bytes.iter().copied().for_each(|b| self.port.send(b));
+        self.pos += bytes.len();
+        Ok(())
+    }
+}
 
 klazy! {
     // SAFETY: we are the only one accessing this port
-    ref static DRIVER: SpinMutex<SerialPort> = unsafe {
-        let mut port = SerialPort::new(0x3F8);
+    ref static DRIVER: SpinMutex<RkyvLogger> = unsafe {
+        let mut port = SerialPort::new(0x3f8);
         port.init();
-        SpinMutex::new(port)
+        SpinMutex::new(RkyvLogger {
+            ser: PortSerializer { port, pos: 0 },
+            buffer: AlignedBytes([0; 512]),
+            scratch: AlignedBytes([0; 512])
+        })
     };
 }
 
-fn _qprint(args: core::fmt::Arguments) {
-    DRIVER.lock().write_fmt(args).expect("qprint");
+pub static MAX_SCRATCH: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+fn _qprint_encode(message: LogMessage<'_>) {
+    let mut lock = DRIVER.lock();
+    let logger = &mut *lock;
+
+    let mut buffer = CompositeSerializer::new(
+        BufferSerializer::new(&mut logger.buffer[..]),
+        ScratchTracker::new(BufferScratch::new(&mut logger.scratch[..])),
+        rkyv::Infallible,
+    );
+
+    let n = buffer.serialize_unsized_value(&message).unwrap() + SIZE_PAD; //.expect("lol");
+
+    let (buffer, scratch, _) = buffer.into_components();
+
+    logger.ser.serialize_value(&LogHeader { size: n }).unwrap();
+    logger.ser.write(&buffer.into_inner()[..n]).unwrap();
+
+    MAX_SCRATCH.store(
+        scratch.max_bytes_allocated(),
+        core::sync::atomic::Ordering::Relaxed,
+    );
 }
 
 #[macro_export]
@@ -44,43 +103,40 @@ impl log::Log for Logger {
     }
 
     fn log(&self, record: &log::Record) {
-        let module = record.module_path_static().unwrap_or("");
-        let line = record.line().unwrap_or(0);
-        let args = record.args();
-        match record.level() {
-            log::Level::Trace => _qprint(format_args!(
-                "\u{001b}[38;2;128;128;128;2m[{}][{}:{}] > {}\u{001b}[0m\n",
-                level(record.level()),
-                module,
-                line,
-                args
-            )),
-            log::Level::Debug => _qprint(format_args!(
-                "\u{001b}[4;1m[{}][{}:{}]\u{001b}[0m > {}\n",
-                level(record.level()),
-                module,
-                line,
-                args
-            )),
-            _ => _qprint(format_args!(
-                "[{}][{}:{}] > {}\n",
-                level(record.level()),
-                module,
-                line,
-                args
-            )),
+        let mut message = [0u8; 512];
+
+        let mut cursor = kcore::io::Cursor::new(&mut message[..]);
+
+        if let Err(_) = core::fmt::write(&mut cursor, format_args!("{}", record.args())) {
+            _qprint_encode(LogMessage {
+                level: Level::Error,
+                line: cursor.buffer().len() as u32,
+                path: file!(),
+                message: "oom formating log",
+            });
         }
+
+        let message = unsafe { core::str::from_utf8_unchecked(cursor.buffer()) };
+
+        let log = LogMessage {
+            level: level_from_log(record.level()),
+            line: record.line().unwrap_or(0),
+            path: record.module_path_static().unwrap_or("notfound"),
+            message,
+        };
+
+        libx64::without_interrupts(|| _qprint_encode(log));
     }
 
     fn flush(&self) {}
 }
 
-const fn level(level: log::Level) -> &'static str {
+const fn level_from_log(level: log::Level) -> Level {
     match level {
-        log::Level::Error => "\u{001b}[31;1mERROR\u{001b}[0m",
-        log::Level::Warn => "\u{001b}[33;1mWARN\u{001b}[0m",
-        log::Level::Info => "\u{001b}[34;1mINFO\u{001b}[0m",
-        log::Level::Debug => "DEBUG",
-        log::Level::Trace => "TRACE",
+        log::Level::Error => Level::Error,
+        log::Level::Warn => Level::Warn,
+        log::Level::Info => Level::Info,
+        log::Level::Debug => Level::Debug,
+        log::Level::Trace => Level::Trace,
     }
 }

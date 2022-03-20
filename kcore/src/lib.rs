@@ -14,6 +14,7 @@ extern crate log;
 
 pub mod either;
 
+pub mod io;
 pub mod ptr;
 
 pub mod queue {
