@@ -136,6 +136,15 @@ where
     }
 }
 
+impl<const N: usize> ExactSizeIterator for FrameRangeInclusive<N>
+where
+    PageCheck<N>: PageSize,
+{
+    fn len(&self) -> usize {
+        self.len()
+    }
+}
+
 impl<const N: usize> core::ops::RangeBounds<PhysicalFrame<N>> for FrameRangeInclusive<N>
 where
     PageCheck<N>: PageSize,
@@ -241,6 +250,15 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next()
+    }
+}
+
+impl<const N: usize> ExactSizeIterator for FrameRange<N>
+where
+    PageCheck<N>: PageSize,
+{
+    fn len(&self) -> usize {
+        self.len()
     }
 }
 
