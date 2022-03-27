@@ -65,7 +65,7 @@ impl<const A: u8, const B: u8> Chained<A, B> {
         let (master, slave) = match self.state {
             State::Init(ref mut m) => m,
             State::Uninit(_) => return Err(Error::UnexpectedUnitialized),
-            State::Raw(_) => unimplemented!(""),
+            State::Raw(_) => unimplemented!(),
         };
         let int_code: u8 = u8::try_from(int_code.into()).unwrap();
         if master.handles_interrupt(int_code) || slave.handles_interrupt(int_code) {

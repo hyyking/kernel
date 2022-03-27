@@ -34,6 +34,13 @@ where
     pub fn ignore(self) {}
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TlbMethod {
+    Ignore,
+    Invalidate,
+    FlushAll,
+}
+
 pub trait PageMapper<const N: usize>
 where
     PageCheck<N>: PageSize,
@@ -67,6 +74,93 @@ where
         let page = Page::containing(VirtualAddr::new(frame.ptr().as_u64()));
         self.map(page, frame, flags, allocator)
     }
+
+    fn map_range<A, P, F>(
+        &mut self,
+        pages: P,
+        frames: F,
+        flags: Flags,
+        allocator: &mut A,
+        method: TlbMethod,
+    ) -> Result<(), FrameError>
+    where
+        A: FrameAllocator<Page4Kb>,
+        P: Iterator<Item = Page<N>> + ExactSizeIterator,
+        F: Iterator<Item = PhysicalFrame<N>> + ExactSizeIterator,
+    {
+        assert_eq!(
+            pages.len(),
+            frames.len(),
+            "map_range requires pages and frames to be the same length"
+        );
+        let flushfn = match method {
+            TlbMethod::FlushAll => TlbFlush::flush,
+            _ => TlbFlush::ignore,
+        };
+
+        pages
+            .zip(frames)
+            .try_for_each(|(page, frame)| self.map(page, frame, flags, allocator).map(flushfn))?;
+
+        if method == TlbMethod::Invalidate {
+            super::invalidate_tlb()
+        }
+
+        Ok(())
+    }
+
+    fn map_range_alloc<A, P>(
+        &mut self,
+        mut pages: P,
+        flags: Flags,
+        allocator: &mut A,
+        method: TlbMethod,
+    ) -> Result<(), FrameError>
+    where
+        A: FrameAllocator<Page4Kb> + FrameAllocator<N>,
+        P: Iterator<Item = Page<N>>,
+    {
+        let flushfn = match method {
+            TlbMethod::FlushAll => TlbFlush::flush,
+            _ => TlbFlush::ignore,
+        };
+
+        pages.try_for_each(|page| {
+            let frame = <A as FrameAllocator<N>>::alloc(allocator)?;
+            self.map(page, frame, flags, allocator).map(flushfn)
+        })?;
+
+        if method == TlbMethod::Invalidate {
+            super::invalidate_tlb()
+        }
+
+        Ok(())
+    }
+
+    fn id_map_range<A, F>(
+        &mut self,
+        mut frames: F,
+        flags: Flags,
+        allocator: &mut A,
+        method: TlbMethod,
+    ) -> Result<(), FrameError>
+    where
+        A: FrameAllocator<Page4Kb>,
+        F: Iterator<Item = PhysicalFrame<N>>,
+    {
+        let flushfn = match method {
+            TlbMethod::FlushAll => TlbFlush::flush,
+            _ => TlbFlush::ignore,
+        };
+
+        frames.try_for_each(|frame| self.id_map(frame, flags, allocator).map(flushfn))?;
+
+        if method == TlbMethod::Invalidate {
+            super::invalidate_tlb()
+        }
+
+        Ok(())
+    }
 }
 
 impl<const N: usize, M> PageMapper<N> for &mut M
@@ -84,15 +178,71 @@ where
     where
         A: FrameAllocator<Page4Kb>,
     {
-        <M as PageMapper<N>>::map(self, page, frame, flags, allocator)
+        <M as PageMapper<N>>::map(*self, page, frame, flags, allocator)
     }
 
     fn update_flags(&mut self, page: Page<N>, flags: Flags) -> Result<TlbFlush<N>, FrameError> {
-        <M as PageMapper<N>>::update_flags(self, page, flags)
+        <M as PageMapper<N>>::update_flags(*self, page, flags)
     }
 
     fn unmap(&mut self, page: Page<N>) -> Result<TlbFlush<N>, FrameError> {
-        <M as PageMapper<N>>::unmap(self, page)
+        <M as PageMapper<N>>::unmap(*self, page)
+    }
+
+    fn id_map<A>(
+        &mut self,
+        frame: PhysicalFrame<N>,
+        flags: Flags,
+        allocator: &mut A,
+    ) -> Result<TlbFlush<N>, FrameError>
+    where
+        A: FrameAllocator<Page4Kb>,
+    {
+        <M as PageMapper<N>>::id_map(*self, frame, flags, allocator)
+    }
+
+    fn map_range<A, P, F>(
+        &mut self,
+        pages: P,
+        frames: F,
+        flags: Flags,
+        allocator: &mut A,
+        method: TlbMethod,
+    ) -> Result<(), FrameError>
+    where
+        A: FrameAllocator<Page4Kb>,
+        P: Iterator<Item = Page<N>> + ExactSizeIterator,
+        F: Iterator<Item = PhysicalFrame<N>> + ExactSizeIterator,
+    {
+        <M as PageMapper<N>>::map_range(*self, pages, frames, flags, allocator, method)
+    }
+
+    fn map_range_alloc<A, P>(
+        &mut self,
+        pages: P,
+        flags: Flags,
+        allocator: &mut A,
+        method: TlbMethod,
+    ) -> Result<(), FrameError>
+    where
+        A: FrameAllocator<Page4Kb> + FrameAllocator<N>,
+        P: Iterator<Item = Page<N>>,
+    {
+        <M as PageMapper<N>>::map_range_alloc(*self, pages, flags, allocator, method)
+    }
+
+    fn id_map_range<A, F>(
+        &mut self,
+        frames: F,
+        flags: Flags,
+        allocator: &mut A,
+        method: TlbMethod,
+    ) -> Result<(), FrameError>
+    where
+        A: FrameAllocator<Page4Kb>,
+        F: Iterator<Item = PhysicalFrame<N>>,
+    {
+        <M as PageMapper<N>>::id_map_range(*self, frames, flags, allocator, method)
     }
 }
 
@@ -196,6 +346,15 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next()
+    }
+}
+
+impl<const N: usize> ExactSizeIterator for PageRangeInclusive<N>
+where
+    PageCheck<N>: PageSize,
+{
+    fn len(&self) -> usize {
+        self.len()
     }
 }
 
@@ -305,6 +464,15 @@ where
     }
 }
 
+impl<const N: usize> ExactSizeIterator for PageRange<N>
+where
+    PageCheck<N>: PageSize,
+{
+    fn len(&self) -> usize {
+        self.len()
+    }
+}
+
 impl<const N: usize> core::ops::RangeBounds<Page<N>> for PageRange<N>
 where
     PageCheck<N>: PageSize,
@@ -357,7 +525,7 @@ where
     #[inline]
     #[must_use]
     pub const fn len(&self) -> usize {
-        self.end().as_usize() - self.start().as_usize() / N
+        (self.end().as_usize() - self.start().as_usize()) / N
     }
 
     #[inline]
