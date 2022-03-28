@@ -65,10 +65,6 @@ unreal_mode:
     # back to real mode, but internal data segment register is still loaded
     # with gdt segment -> we can access the full 4GiB of memory
 
-    mov bx, 0x0f01         # attrib/char of smiley
-    mov eax, 0xb8f00       # note 32 bit offset
-    mov word ptr ds:[eax], bx
-
 check_int13h_extensions:
     mov ah, 0x41
     mov bx, 0x55aa

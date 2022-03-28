@@ -8,35 +8,22 @@ fn main() {
 
 #[cfg(feature = "binary")]
 mod binary {
-    use quote::quote;
     use std::convert::TryInto;
+    use std::{
+        env,
+        fs::{self, File},
+        io::Write,
+        path::{Path, PathBuf},
+        process::{self, Command},
+    };
+
+    use llvm_tools_build as llvm_tools;
+    use quote::quote;
+    use toml::Value;
 
     pub fn main() {
-        use llvm_tools_build as llvm_tools;
-        use std::{
-            env,
-            fs::{self, File},
-            io::Write,
-            path::{Path, PathBuf},
-            process::{self, Command},
-        };
-        use toml::Value;
-
-        let target = env::var("TARGET").expect("TARGET not set");
-        let (firmware, expected_target) = ("BIOS", "x86_64-bootloader");
-
-        if Path::new(&target)
-            .file_stem()
-            .expect("target has no file stem")
-            != expected_target
-        {
-            panic!(
-                "The {} bootloader must be compiled for the `{}` target.",
-                firmware, expected_target,
-            );
-        }
-
         let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR not set"));
+
         let kernel = PathBuf::from(match env::var("KERNEL") {
             Ok(kernel) => kernel,
             Err(_) => {
@@ -75,49 +62,10 @@ mod binary {
             }
         };
 
-        // check that kernel executable has code in it
-        let llvm_size = llvm_tools
-            .tool(&llvm_tools::exe("llvm-size"))
-            .expect("llvm-size not found in llvm-tools");
-        let mut cmd = Command::new(llvm_size);
-        cmd.arg(&kernel);
-        let output = cmd.output().expect("failed to run llvm-size");
-        let output_str = String::from_utf8_lossy(&output.stdout);
-        let second_line_opt = output_str.lines().skip(1).next();
-        let second_line = second_line_opt.expect(&format!(
-            "unexpected llvm-size line output:\n{}",
-            output_str
-        ));
-        let text_size_opt = second_line.split_ascii_whitespace().next();
-        let text_size =
-            text_size_opt.expect(&format!("unexpected llvm-size output:\n{}", output_str));
-        if text_size == "0" {
-            panic!("Kernel executable has an empty text section. Perhaps the entry point was set incorrectly?\n\n\
-            Kernel executable at `{}`\n", kernel.display());
-        }
-
-        // strip debug symbols from kernel for faster loading
-        let stripped_kernel_file_name = format!("kernel_stripped-{}", kernel_file_name);
-        let stripped_kernel = out_dir.join(&stripped_kernel_file_name);
         let objcopy = llvm_tools
             .tool(&llvm_tools::exe("llvm-objcopy"))
             .expect("llvm-objcopy not found in llvm-tools");
-        let mut cmd = Command::new(&objcopy);
-        cmd.arg("--strip-debug");
-        cmd.arg(&kernel);
-        cmd.arg(&stripped_kernel);
-        let exit_status = cmd
-            .status()
-            .expect("failed to run objcopy to strip debug symbols");
-        if !exit_status.success() {
-            eprintln!("Error: Stripping debug symbols failed");
-            process::exit(1);
-        }
 
-        // wrap the kernel executable as binary in a new ELF file
-        let stripped_kernel_file_name_replaced = stripped_kernel_file_name
-            .replace('-', "_")
-            .replace('.', "_");
         let kernel_bin = out_dir.join(format!("kernel_bin-{}.o", kernel_file_name));
         let kernel_archive = out_dir.join(format!("libkernel_bin-{}.a", kernel_file_name));
         let mut cmd = Command::new(&objcopy);
@@ -125,20 +73,21 @@ mod binary {
         cmd.arg("-O").arg("elf64-x86-64");
         cmd.arg("--binary-architecture=i386:x86-64");
         cmd.arg("--rename-section").arg(".data=.kernel");
-        cmd.arg("--redefine-sym").arg(format!(
-            "_binary_{}_start=_kernel_start_addr",
-            stripped_kernel_file_name_replaced
-        ));
-        cmd.arg("--redefine-sym").arg(format!(
-            "_binary_{}_end=_kernel_end_addr",
-            stripped_kernel_file_name_replaced
-        ));
-        cmd.arg("--redefine-sym").arg(format!(
-            "_binary_{}_size=_kernel_size",
-            stripped_kernel_file_name_replaced
-        ));
-        cmd.current_dir(&out_dir);
-        cmd.arg(&stripped_kernel_file_name);
+
+        let redef = format!("{}", kernel.display())
+            .replace('/', "_")
+            .replace('-', "_")
+            .replace('.', "_");
+
+        cmd.arg("--redefine-sym")
+            .arg(format!("_binary_{}_start=_kernel_start_addr", redef));
+
+        cmd.arg("--redefine-sym")
+            .arg(format!("_binary_{}_end=_kernel_end_addr", redef));
+        cmd.arg("--redefine-sym")
+            .arg(format!("_binary_{}_size=_kernel_size", redef));
+        // cmd.current_dir(&out_dir);
+        cmd.arg(&kernel);
         cmd.arg(&kernel_bin);
         let exit_status = cmd.status().expect("failed to run objcopy");
         if !exit_status.success() {

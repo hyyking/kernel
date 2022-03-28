@@ -1,5 +1,6 @@
 [build]
 target = "x86_64-bootloader.json"
+rustflags = ["-C", "opt-level=z"]
 
 [unstable]
 build-std = ["core"]
