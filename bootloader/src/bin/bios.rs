@@ -117,11 +117,15 @@ fn bootloader_main(kernel: Kernel, memory_map: E820MemoryMap<'_>) -> ! {
     let mut frame_allocator = BiosFrameAllocator::new(memory_map).unwrap();
 
     // We identity-map all memory, so the offset between physical and virtual addresses is 0
-    let mut bootloader = Bootloader::new(OffsetMapper::new(VirtualAddr::new(0)));
+    let mut bootloader = Bootloader::new(kernel, OffsetMapper::new(VirtualAddr::new(0))).unwrap();
     bootloader
-        .map_virtual_memory(&mut frame_allocator, max_phys_addr)
+        .id_map_virtual_memory(&mut frame_allocator, max_phys_addr)
         .expect("unable to map virtual memory")
         .create_page_tables(&mut frame_allocator);
+
+    bootloader
+        .load_kernel(&mut frame_allocator)
+        .expect("unable to load the kernel");
 
     let (framebuffer_addr, framebuffer_info) = make_framebuffer_info();
 
@@ -131,12 +135,13 @@ fn bootloader_main(kernel: Kernel, memory_map: E820MemoryMap<'_>) -> ! {
         rsdp_addr: detect_rsdp(),
     };
 
-    bootloader::binary::load_and_switch_to_kernel(
-        kernel.bytes(),
+    let (mappings, bootinfo) = bootloader::binary::load_and_switch_to_kernel(
+        &mut bootloader,
         frame_allocator,
-        bootloader.page_tables().unwrap(),
         system_info,
     );
+
+    bootloader.boot(mappings, bootinfo)
 }
 
 fn detect_rsdp() -> Option<PhysicalAddr> {
@@ -170,8 +175,5 @@ fn detect_rsdp() -> Option<PhysicalAddr> {
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     log::error!("[PANIC]: {}", info);
-    loop {
-        libx64::cli();
-        libx64::hlt();
-    }
+    libx64::diverging_hlt()
 }

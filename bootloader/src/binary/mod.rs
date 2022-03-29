@@ -5,6 +5,7 @@ use core::{
 };
 
 use crate::{
+    binary::bootloader::{Bootloader, KernelLoad},
     binary::memory::BiosFrameAllocator,
     boot_info::{BootInfo, FrameBuffer, FrameBufferInfo, MemoryRegion, TlsTemplate},
 };
@@ -16,7 +17,7 @@ use libx64::address::{PhysicalAddr, VirtualAddr};
 use libx64::paging::{
     entry::Flags,
     frame::{FrameAllocator, FrameError, FrameRange, PhysicalFrame},
-    page::{Page, PageMapper, PageRange, PageRangeInclusive, TlbFlush},
+    page::{Page, PageMapper, PageRange, PageRangeInclusive, TlbFlush, TlbMethod},
     Page2Mb, Page4Kb,
 };
 
@@ -65,28 +66,21 @@ pub struct SystemInfo {
 /// [`create_boot_info`], and finally [`switch_to_kernel`]. The given arguments are passed
 /// directly to these functions, so see their docs for more info.
 #[cold]
-pub fn load_and_switch_to_kernel(
-    kernel_bytes: &[u8],
+pub fn load_and_switch_to_kernel<M>(
+    bootloader: &mut Bootloader<M>,
     mut frame_allocator: BiosFrameAllocator,
-    mut page_tables: PageTables,
     system_info: SystemInfo,
-) -> ! {
+) -> (Mappings, &'static mut BootInfo) {
     let mut mappings = set_up_mappings(
-        kernel_bytes,
+        bootloader,
         &mut frame_allocator,
-        &mut page_tables,
         system_info.framebuffer_addr,
         system_info.framebuffer_info.byte_len,
     )
     .unwrap();
-    let boot_info = create_boot_info(
-        frame_allocator,
-        &mut page_tables,
-        &mut mappings,
-        system_info,
-    )
-    .unwrap();
-    switch_to_kernel(page_tables, mappings, boot_info);
+    let boot_info =
+        create_boot_info(bootloader, frame_allocator, &mut mappings, system_info).unwrap();
+    (mappings, boot_info)
 }
 
 /// Sets up mappings for a kernel stack and the framebuffer.
@@ -103,14 +97,17 @@ pub fn load_and_switch_to_kernel(
 ///
 /// This function reacts to unexpected situations (e.g. invalid kernel ELF file) with a panic, so
 /// errors are not recoverable.
-#[cold]
-pub fn set_up_mappings(
-    kernel_bytes: &[u8],
+pub fn set_up_mappings<M>(
+    bootloader: &mut Bootloader<M>,
     frame_allocator: &mut BiosFrameAllocator,
-    page_tables: &mut PageTables,
     framebuffer_addr: PhysicalAddr,
     framebuffer_size: usize,
 ) -> Result<Mappings, FrameError> {
+    let frame_buffer_loc = frame_buffer_location(&mut bootloader.entries);
+    let stack_start_addr = kernel_stack_start_location(&mut bootloader.entries);
+
+    let page_tables = bootloader.page_tables().expect("no page tables");
+
     let kernel_page_table = &mut page_tables.kernel;
 
     // Enable support for the no-execute bit in page tables.
@@ -120,65 +117,61 @@ pub fn set_up_mappings(
     // Make the kernel respect the write-protection bits even when in ring 0 by default
     enable_write_protect_bit();
 
-    let (entry_point, tls_template, mut used_entries) =
-        load_kernel::load_kernel(kernel_bytes, kernel_page_table, frame_allocator)
-            .expect("no entry point");
-
     // create a stack
-    let stack_start_addr = kernel_stack_start_location(&mut used_entries);
     let stack_start = Page::<Page4Kb>::containing(stack_start_addr);
     let stack_end = {
         let stack_size = CONFIG.kernel_stack_size.unwrap_or(20 * Page4Kb as u64);
         let end_addr = stack_start_addr + stack_size;
         Page::<Page4Kb>::containing(end_addr)
     };
+    let stack = PageRange::new(stack_start, stack_end);
 
-    trace!(
-        "Mapping Stack at: {:?} - {:?}",
-        stack_start.ptr(),
-        stack_end.ptr()
-    );
-    for page in PageRange::new(stack_start, stack_end) {
-        let frame = frame_allocator.alloc()?;
-        kernel_page_table
-            .map(page, frame, Flags::PRESENT | Flags::RW, frame_allocator)
-            .map(TlbFlush::flush)?;
-    }
+    trace!("Mapping Stack at: {:?}", stack);
+
+    kernel_page_table.map_range_alloc(
+        stack,
+        Flags::PRESENT | Flags::RW,
+        frame_allocator,
+        TlbMethod::Ignore,
+    )?;
 
     // identity-map context switch function, so that we don't get an immediate pagefault
     // after switching the active page table
-    let context_switch_function = PhysicalAddr::from_ptr(context_switch as *const ());
-    info!("Entry point at {:?}", entry_point);
     info!(
         "Mapping context switch at {:?}",
         VirtualAddr::from_ptr(context_switch as *const ())
     );
-    // Allocate the context switch
-    for frame in FrameRange::<Page4Kb>::with_size(context_switch_function, 1 * Page4Kb as u64) {
-        kernel_page_table
-            .id_map(frame, Flags::PRESENT, frame_allocator)
-            .map(TlbFlush::flush)?
-    }
+    kernel_page_table
+        .id_map(
+            PhysicalFrame::<Page4Kb>::containing_ptr(context_switch as *const ()),
+            Flags::PRESENT,
+            frame_allocator,
+        )
+        .map(TlbFlush::ignore)?;
 
     trace!("Mapping GDT");
     gdt::create_and_load(kernel_page_table, frame_allocator).unwrap();
 
     // map framebuffer
     let framebuffer_virt_addr = if CONFIG.map_framebuffer {
-        let start_frame = PhysicalFrame::<Page4Kb>::containing(framebuffer_addr);
-        let end_frame = PhysicalFrame::<Page4Kb>::containing(framebuffer_addr + framebuffer_size);
-        let framebuffer_phys_range = FrameRange::new(start_frame, end_frame);
+        let framebuffer_phys_range =
+            FrameRange::with_size(framebuffer_addr, framebuffer_size as u64);
+
         info!("Mapping framebuffer at {:?}", framebuffer_phys_range);
 
-        let start_page = Page::<Page4Kb>::containing(frame_buffer_location(&mut used_entries));
-        for (i, frame) in framebuffer_phys_range.enumerate() {
-            let page = Page::<Page4Kb>::containing(start_page.ptr() + i * Page4Kb);
-            kernel_page_table
-                .map(page, frame, Flags::PRESENT | Flags::RW, frame_allocator)
-                .map(TlbFlush::flush)?
-        }
-        let framebuffer_virt_addr = start_page.ptr();
-        Some(framebuffer_virt_addr)
+        let page_range =
+            PageRangeInclusive::<Page4Kb>::with_size(frame_buffer_loc, framebuffer_size as u64);
+        let start_addr = page_range.start();
+
+        kernel_page_table.map_range(
+            page_range,
+            framebuffer_phys_range,
+            Flags::PRESENT | Flags::RW,
+            frame_allocator,
+            TlbMethod::Ignore,
+        )?;
+
+        Some(start_addr)
     } else {
         None
     };
@@ -190,45 +183,34 @@ pub fn set_up_mappings(
 
         let max_phys = frame_allocator.memory_map().max_phys_addr();
 
-        let start_frame = PhysicalFrame::<Page2Mb>::containing(PhysicalAddr::new(0));
-        let end_frame = PhysicalFrame::<Page2Mb>::containing(max_phys);
-
-        for frame in FrameRange::<Page2Mb>::new(start_frame, end_frame) {
-            let page = Page::<Page2Mb>::containing(offset + frame.ptr().as_u64());
-
-            kernel_page_table
-                .map(page, frame, Flags::PRESENT | Flags::RW, frame_allocator)
-                .map(TlbFlush::ignore)?
-        }
-
+        let memory = FrameRange::<Page2Mb>::new_addr(PhysicalAddr::new(0), max_phys);
+        kernel_page_table.map_range(
+            memory
+                .clone()
+                .map(|frame| Page::<Page2Mb>::containing(offset + frame.ptr().as_u64())),
+            memory,
+            Flags::PRESENT | Flags::RW,
+            frame_allocator,
+            TlbMethod::Ignore,
+        )?;
         offset
     };
 
     Ok(Mappings {
         framebuffer: framebuffer_virt_addr,
         physical_memory_offset,
-        entry_point,
         stack_end,
-        used_entries,
-        tls_template,
     })
 }
 
 /// Contains the addresses of all memory mappings set up by [`set_up_mappings`].
 pub struct Mappings {
-    /// The entry point address of the kernel.
-    pub entry_point: VirtualAddr,
     /// Physical Memory Offset
     pub physical_memory_offset: VirtualAddr,
     /// The stack end page of the kernel.
     pub stack_end: Page<Page4Kb>,
-    /// Keeps track of used entries in the level 4 page table, useful for finding a free
-    /// virtual memory when needed.
-    pub used_entries: UsedLevel4Entries,
     /// The start address of the framebuffer, if any.
     pub framebuffer: Option<VirtualAddr>,
-    /// The thread local storage template of the kernel executable, if it contains one.
-    pub tls_template: Option<TlsTemplate>,
 }
 
 /// Allocates and initializes the boot info struct and the memory map.
@@ -238,20 +220,24 @@ pub struct Mappings {
 /// reference that is valid in both address spaces. The necessary physical frames
 /// are taken from the given `frame_allocator`.
 #[cold]
-pub fn create_boot_info(
+pub fn create_boot_info<M>(
+    bootloader: &mut Bootloader<M>,
     mut frame_allocator: BiosFrameAllocator,
-    page_tables: &mut PageTables,
     mappings: &mut Mappings,
     system_info: SystemInfo,
 ) -> Result<&'static mut BootInfo, FrameError> {
+    let boot_info_addr = boot_info_location(&mut bootloader.entries);
+    let page_tables = bootloader.page_tables().expect("no page tables");
+
     info!("Allocating bootinfo");
 
     // allocate and map space for the boot info
     let (boot_info, memory_regions) = {
-        let boot_info_addr = boot_info_location(&mut mappings.used_entries);
         let boot_info_end = boot_info_addr + mem::size_of::<BootInfo>();
+
         let memory_map_regions_addr =
             boot_info_end.align_up(u64::try_from(mem::align_of::<MemoryRegion>()).unwrap());
+
         let regions = frame_allocator.len() + 1; // one region might be split into used/unused
         let memory_map_regions_end =
             memory_map_regions_addr + regions * mem::size_of::<MemoryRegion>();
@@ -294,6 +280,11 @@ pub fn create_boot_info(
 
     info!("Creating bootinfo");
 
+    let tls_template = match bootloader.kernel {
+        KernelLoad::Loaded { tls, .. } => tls,
+        _ => panic!("kernel not loaded"),
+    };
+
     // create boot info
     let boot_info = boot_info.write(BootInfo {
         version_major: env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap(),
@@ -311,12 +302,13 @@ pub fn create_boot_info(
             .into(),
         rsdp_addr: system_info.rsdp_addr.map(|addr| addr.as_u64()).into(),
         physical_memory_offset: mappings.physical_memory_offset.as_u64(),
-        tls_template: mappings.tls_template.into(),
+        tls_template: tls_template.into(),
     });
 
     Ok(boot_info)
 }
 
+/*
 /// Switches to the kernel address space and jumps to the kernel entry point.
 #[cold]
 pub fn switch_to_kernel(
@@ -342,6 +334,7 @@ pub fn switch_to_kernel(
         context_switch(addresses);
     }
 }
+*/
 
 /// Provides access to the page tables of the bootloader and kernel address space.
 pub struct PageTables {

@@ -1,4 +1,4 @@
-use crate::binary::PageTables;
+use crate::binary::{PageTables, TlsTemplate, UsedLevel4Entries};
 
 use page_mapper::OffsetMapper;
 
@@ -7,15 +7,17 @@ use libx64::{
     paging::{
         entry::Flags,
         frame::{FrameAllocator, FrameError, FrameRange, FrameTranslator, PhysicalFrame},
-        page::PageMapper,
-        Page1Gb, Page2Mb, Page4Kb, PageCheck, PageSize,
+        page::{PageMapper, TlbMethod},
+        Page1Gb, Page2Mb, Page4Kb,
     },
 };
 
+use xmas_elf::{header, ElfFile};
+
 #[repr(C)]
 pub struct Kernel {
-    start: PhysicalAddr,
-    size: u64,
+    pub start: PhysicalAddr,
+    pub size: u64,
 }
 
 impl Kernel {
@@ -28,51 +30,47 @@ impl Kernel {
         unsafe { core::slice::from_raw_parts(ptr.as_ref(), usize::try_from(self.size).unwrap()) }
     }
 
+    pub fn elf_file(&self) -> ElfFile<'_> {
+        ElfFile::new(self.bytes()).expect("kernel bytes are an invalid elf file")
+    }
+
     pub fn frames(&self) -> FrameRange<Page4Kb> {
         FrameRange::with_size(self.start, self.size)
     }
 }
 
-pub struct Ram {
-    start: PhysicalAddr,
-    end: PhysicalAddr,
-}
+pub enum KernelLoad {
+    NotLoaded {
+        kernel: Option<Kernel>,
+        offset: VirtualAddr,
+    },
+    Loaded {
+        kernel: Kernel,
+        offset: VirtualAddr,
 
-impl Ram {
-    pub const fn new(start: PhysicalAddr, end: PhysicalAddr) -> Self {
-        Self { start, end }
-    }
-
-    pub const fn frames<const N: usize>(&self) -> FrameRange<N>
-    where
-        PageCheck<N>: PageSize,
-    {
-        let start_frame = PhysicalFrame::<N>::containing(self.start);
-        let end_frame = PhysicalFrame::<N>::containing(self.end);
-        FrameRange::new(start_frame, end_frame)
-    }
-
-    pub fn id_map<M, A, const N: usize>(
-        &mut self,
-        mapper: &mut M,
-        alloc: &mut A,
-    ) -> Result<(), FrameError>
-    where
-        PageCheck<N>: PageSize,
-        M: PageMapper<N>,
-        A: FrameAllocator<Page4Kb>,
-    {
-        self.frames::<N>().try_for_each(|frame| {
-            mapper
-                .id_map(frame, Flags::PRESENT | Flags::RW, alloc)
-                .map(libx64::paging::page::TlbFlush::flush)
-        })
-    }
+        entrypoint: VirtualAddr,
+        tls: Option<TlsTemplate>,
+    },
 }
 
 pub struct Bootloader<M> {
+    pub entries: UsedLevel4Entries,
+    pub kernel: KernelLoad,
     mapper: M,
     page_tables: Option<PageTables>,
+    framebuffer: Option<()>,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum BootloaderError {
+    MalformedKernel,
+    UnsupportedKernelExecutable,
+}
+
+impl<M> Bootloader<M> {
+    pub fn page_tables(&mut self) -> Option<&mut PageTables> {
+        self.page_tables.as_mut()
+    }
 }
 
 impl<M> Bootloader<M>
@@ -82,22 +80,47 @@ where
         + PageMapper<Page1Gb>
         + FrameTranslator<(), Page4Kb>,
 {
-    pub fn new(mapper: M) -> Self {
-        Self {
-            mapper,
-            page_tables: None,
+    pub fn new(kernel: Kernel, mapper: M) -> Result<Self, BootloaderError> {
+        if !kernel.start.is_aligned(Page4Kb as u64) {
+            return Err(BootloaderError::MalformedKernel);
         }
+
+        let elf_file = kernel.elf_file();
+
+        let offset = match elf_file.header.pt2.type_().as_type() {
+            header::Type::Executable => VirtualAddr::new(0),
+            header::Type::SharedObject => VirtualAddr::new(0x400000),
+
+            header::Type::None
+            | header::Type::Relocatable
+            | header::Type::Core
+            | header::Type::ProcessorSpecific(_) => {
+                return Err(BootloaderError::UnsupportedKernelExecutable)
+            }
+        };
+
+        qemu_logger::dbg!(offset);
+
+        header::sanity_check(&elf_file).map_err(|_| BootloaderError::MalformedKernel)?;
+        info!("Elf file loaded at {:?}", kernel.frames());
+
+        Ok(Self {
+            entries: UsedLevel4Entries::new(),
+            kernel: KernelLoad::NotLoaded {
+                kernel: Some(kernel),
+                offset,
+            },
+            mapper,
+            framebuffer: None,
+            page_tables: None,
+        })
     }
 
     pub fn mapper(&mut self) -> &mut M {
         &mut self.mapper
     }
 
-    pub fn page_tables(&mut self) -> Option<PageTables> {
-        self.page_tables.take()
-    }
-
-    pub fn map_virtual_memory<A>(
+    pub fn id_map_virtual_memory<A>(
         &mut self,
         frame_allocator: &mut A,
         max_phys_addr: PhysicalAddr,
@@ -106,8 +129,16 @@ where
         A: FrameAllocator<Page4Kb>,
     {
         // identity-map remaining physical memory (first gigabyte is already identity-mapped)
-        Ram::new(PhysicalAddr::new(Page1Gb as u64), max_phys_addr)
-            .id_map::<M, _, Page2Mb>(&mut self.mapper, frame_allocator)?;
+        let start_frame = PhysicalFrame::<Page2Mb>::containing(PhysicalAddr::new(Page1Gb as u64));
+        let end_frame = PhysicalFrame::<Page2Mb>::containing(max_phys_addr);
+        let ram = FrameRange::new(start_frame, end_frame);
+
+        self.mapper.id_map_range(
+            ram,
+            Flags::PRESENT | Flags::RW,
+            frame_allocator,
+            TlbMethod::Invalidate,
+        )?;
         Ok(self)
     }
 
@@ -132,5 +163,83 @@ where
         });
 
         self
+    }
+
+    pub fn load_kernel<A>(&mut self, frame_allocator: &mut A) -> Result<&mut Self, &'static str>
+    where
+        A: FrameAllocator<Page4Kb>,
+    {
+        let pt = match self.page_tables {
+            Some(ref mut pt) => pt,
+            None => {
+                log::error!("didn't load the kernel as no page table was provided");
+                return Err("kernel loading error: missing page tables");
+            }
+        };
+        let (kernel, offset) = match self.kernel {
+            KernelLoad::NotLoaded {
+                kernel: ref mut a @ Some(_),
+                offset,
+            } => (a.take().unwrap(), offset),
+            _ => {
+                log::error!("didn't load the kernel as it was expected to not be loaded");
+                return Err("kernel loading error: missing page tables");
+            }
+        };
+
+        let mut loader = crate::binary::load_kernel::Loader::new(
+            &kernel,
+            offset,
+            &mut pt.kernel,
+            frame_allocator,
+        );
+
+        self.entries.set_elf_loaded(&kernel.elf_file(), offset);
+
+        let entrypoint = offset + kernel.elf_file().header.pt2.entry_point();
+        let tls = loader.load_segments()?;
+
+        info!("Entry point at {:?}", entrypoint);
+
+        self.kernel = KernelLoad::Loaded {
+            kernel,
+            offset,
+            entrypoint,
+            tls,
+        };
+
+        Ok(self)
+    }
+
+    #[cold]
+    pub fn boot(
+        mut self,
+        mappings: crate::binary::Mappings,
+        boot_info: &'static mut crate::BootInfo,
+    ) -> ! {
+        let PageTables { mut kernel, .. } = self.page_tables.take().expect("page tables not set");
+
+        let entry_point = match self.kernel {
+            KernelLoad::Loaded { entrypoint, .. } => entrypoint,
+            _ => panic!("kernel not loaded"),
+        };
+
+        let addresses = crate::binary::Addresses {
+            page_table: PhysicalFrame::<Page4Kb>::containing_ptr(
+                kernel.level4().as_ref().get_ref(),
+            ),
+            stack_top: mappings.stack_end.ptr(),
+            entry_point,
+            boot_info,
+        };
+
+        info!(
+            "Jumping to kernel entry point at {:?}",
+            addresses.entry_point
+        );
+
+        unsafe {
+            crate::binary::context_switch(addresses);
+        }
     }
 }

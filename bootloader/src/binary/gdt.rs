@@ -12,10 +12,11 @@ use libx64::{
 };
 
 #[cold]
-pub fn create_and_load(
-    kernel_mapper: &mut impl PageMapper<Page4Kb>,
-    alloc: &mut impl FrameAllocator<Page4Kb>,
-) -> Result<(), FrameError> {
+pub fn create_and_load<M, A>(kernel_mapper: &mut M, alloc: &mut A) -> Result<(), FrameError>
+where
+    M: PageMapper<Page4Kb>,
+    A: FrameAllocator<Page4Kb>,
+{
     let gdt_frame = alloc.alloc()?;
     let phys_addr = gdt_frame.ptr();
 
