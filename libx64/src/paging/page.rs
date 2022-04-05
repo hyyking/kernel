@@ -9,6 +9,8 @@ use crate::{
     },
 };
 
+use super::table::Level4;
+
 pub trait PageTranslator {
     fn try_translate(&mut self, addr: VirtualAddr) -> Result<Translation, FrameError>;
 }
@@ -45,6 +47,9 @@ pub trait PageMapper<const N: usize>
 where
     PageCheck<N>: PageSize,
 {
+    unsafe fn from_level4(page: super::PinTableMut<'_, Level4>) -> Self;
+    fn level4(&mut self) -> super::PinTableMut<'_, Level4>;
+
     /// # Errors
     ///
     /// - No more available frames
@@ -160,89 +165,6 @@ where
         }
 
         Ok(())
-    }
-}
-
-impl<const N: usize, M> PageMapper<N> for &mut M
-where
-    PageCheck<N>: PageSize,
-    M: PageMapper<N>,
-{
-    fn map<A>(
-        &mut self,
-        page: Page<N>,
-        frame: PhysicalFrame<N>,
-        flags: Flags,
-        allocator: &mut A,
-    ) -> Result<TlbFlush<N>, FrameError>
-    where
-        A: FrameAllocator<Page4Kb>,
-    {
-        <M as PageMapper<N>>::map(*self, page, frame, flags, allocator)
-    }
-
-    fn update_flags(&mut self, page: Page<N>, flags: Flags) -> Result<TlbFlush<N>, FrameError> {
-        <M as PageMapper<N>>::update_flags(*self, page, flags)
-    }
-
-    fn unmap(&mut self, page: Page<N>) -> Result<TlbFlush<N>, FrameError> {
-        <M as PageMapper<N>>::unmap(*self, page)
-    }
-
-    fn id_map<A>(
-        &mut self,
-        frame: PhysicalFrame<N>,
-        flags: Flags,
-        allocator: &mut A,
-    ) -> Result<TlbFlush<N>, FrameError>
-    where
-        A: FrameAllocator<Page4Kb>,
-    {
-        <M as PageMapper<N>>::id_map(*self, frame, flags, allocator)
-    }
-
-    fn map_range<A, P, F>(
-        &mut self,
-        pages: P,
-        frames: F,
-        flags: Flags,
-        allocator: &mut A,
-        method: TlbMethod,
-    ) -> Result<(), FrameError>
-    where
-        A: FrameAllocator<Page4Kb>,
-        P: Iterator<Item = Page<N>> + ExactSizeIterator,
-        F: Iterator<Item = PhysicalFrame<N>> + ExactSizeIterator,
-    {
-        <M as PageMapper<N>>::map_range(*self, pages, frames, flags, allocator, method)
-    }
-
-    fn map_range_alloc<A, P>(
-        &mut self,
-        pages: P,
-        flags: Flags,
-        allocator: &mut A,
-        method: TlbMethod,
-    ) -> Result<(), FrameError>
-    where
-        A: FrameAllocator<Page4Kb> + FrameAllocator<N>,
-        P: Iterator<Item = Page<N>>,
-    {
-        <M as PageMapper<N>>::map_range_alloc(*self, pages, flags, allocator, method)
-    }
-
-    fn id_map_range<A, F>(
-        &mut self,
-        frames: F,
-        flags: Flags,
-        allocator: &mut A,
-        method: TlbMethod,
-    ) -> Result<(), FrameError>
-    where
-        A: FrameAllocator<Page4Kb>,
-        F: Iterator<Item = PhysicalFrame<N>>,
-    {
-        <M as PageMapper<N>>::id_map_range(*self, frames, flags, allocator, method)
     }
 }
 
