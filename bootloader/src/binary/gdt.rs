@@ -45,5 +45,5 @@ where
 
     kernel_mapper
         .id_map(gdt_frame, Flags::PRESENT, alloc)
-        .map(TlbFlush::flush)
+        .map(TlbFlush::ignore)
 }

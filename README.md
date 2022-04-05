@@ -18,9 +18,9 @@ Build a micro/exokernel
 
 ## Features
 
-- [X] IDT/GDT
-- [X] Paging
-- [X] Logging
+- [x] IDT/GDT
+- [x] Paging
+- [x] Logging
 - [ ] Allocator
 - [ ] Scheduler
 - [ ] Filesystem

@@ -193,6 +193,34 @@ impl<'a> FrameAllocator<Page4Kb> for BiosFrameAllocator<'a> {
     }
 }
 
+pub trait BootFrameAllocator: libx64::paging::frame::FrameAllocator<Page4Kb> {
+    fn write_memory_map<'a>(
+        &self,
+        mem: &'a mut [MaybeUninit<MemoryRegion>],
+    ) -> Result<&'a mut [MemoryRegion], ()>;
+
+    fn max_physical_address(&self) -> PhysicalAddr;
+
+    fn len(&self) -> usize;
+}
+
+impl<'a> BootFrameAllocator for BiosFrameAllocator<'a> {
+    fn write_memory_map<'b>(
+        &self,
+        mem: &'b mut [MaybeUninit<MemoryRegion>],
+    ) -> Result<&'b mut [MemoryRegion], ()> {
+        construct_memory_map(self.memory_map(), mem)
+    }
+
+    fn max_physical_address(&self) -> PhysicalAddr {
+        self.memory_map().max_phys_addr()
+    }
+
+    fn len(&self) -> usize {
+        self.len()
+    }
+}
+
 /// Converts this type to a boot info memory map.
 ///
 /// The memory map is placed in the given `regions` slice. The length of the given slice
@@ -200,7 +228,7 @@ impl<'a> FrameAllocator<Page4Kb> for BiosFrameAllocator<'a> {
 ///
 /// The return slice is a subslice of `regions`, shortened to the actual number of regions.
 pub fn construct_memory_map<'a>(
-    mem: E820MemoryMap<'_>,
+    mem: &E820MemoryMap<'_>,
     regions: &'a mut [MaybeUninit<MemoryRegion>],
 ) -> Result<&'a mut [MemoryRegion], ()> {
     let mut next_index = 0;

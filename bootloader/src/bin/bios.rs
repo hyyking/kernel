@@ -12,9 +12,9 @@ use bootloader::{
     binary::{
         bootloader::{Bootloader, Kernel},
         memory::{BiosFrameAllocator, E820MemoryMap},
-        SystemInfo,
+        SystemInfo, CONFIG,
     },
-    boot_info::{FrameBufferInfo, PixelFormat},
+    boot_info::{FrameBuffer, FrameBufferInfo, PixelFormat},
 };
 
 use rsdp::{
@@ -58,7 +58,8 @@ extern "C" {
 pub unsafe extern "C" fn stage_4() -> ! {
     // Set stack segment
     asm!(
-        "mov ax, 0x0; mov ss, ax",
+        "mov ax, 0x0;
+         mov ss, ax",
         out("ax") _,
     );
 
@@ -71,17 +72,19 @@ pub unsafe extern "C" fn stage_4() -> ! {
     let memory_map = E820MemoryMap::from_memory(
         VirtualAddr::new(&_memory_map as *const _ as u64),
         usize::try_from((mmap_ent & 0xff) as u64).unwrap(),
-        core::iter::Step::forward_checked(kernel.frames().last().unwrap(), 1).unwrap(),
+        core::iter::Step::forward(kernel.frames().last().unwrap(), 1),
     );
 
     bootloader_main(kernel, memory_map)
 }
 
-fn make_framebuffer_info() -> (PhysicalAddr, FrameBufferInfo) {
+fn make_framebuffer() -> FrameBuffer {
     let addr = PhysicalAddr::new(unsafe { u64::from(VBEModeInfo_physbaseptr) });
+
+    let framebuffer_size =
+        unsafe { usize::from(VBEModeInfo_yresolution) * usize::from(VBEModeInfo_bytesperscanline) };
+
     let info = unsafe {
-        let framebuffer_size =
-            usize::from(VBEModeInfo_yresolution) * usize::from(VBEModeInfo_bytesperscanline);
         let bytes_per_pixel = VBEModeInfo_bitsperpixel / 8;
 
         let pixel_format = match (
@@ -103,50 +106,74 @@ fn make_framebuffer_info() -> (PhysicalAddr, FrameBufferInfo) {
             pixel_format,
         }
     };
-    (addr, info)
+
+    FrameBuffer {
+        buffer_start: addr.as_u64(),
+        buffer_byte_len: framebuffer_size,
+        info,
+    }
 }
 
-fn bootloader_main(kernel: Kernel, memory_map: E820MemoryMap<'_>) -> ! {
+fn bootloader_main(kernel: Kernel, memory_map: E820MemoryMap<'static>) -> ! {
     qemu_logger::init().expect("unable to initialize logger");
     log::info!(
         "BIOS boot at {:?}",
         PhysicalAddr::from_ptr(bootloader_main as *const ())
     );
 
-    let max_phys_addr = memory_map.max_phys_addr();
-    let mut frame_allocator = BiosFrameAllocator::new(memory_map).unwrap();
-
     // We identity-map all memory, so the offset between physical and virtual addresses is 0
-    let mut bootloader = Bootloader::new(kernel, OffsetMapper::new(VirtualAddr::new(0))).unwrap();
-    bootloader
-        .id_map_virtual_memory(&mut frame_allocator, max_phys_addr)
-        .expect("unable to map virtual memory")
-        .create_page_tables(&mut frame_allocator);
+    let bootloader = Bootloader::<OffsetMapper, _, _>::new(
+        kernel,
+        BiosFrameAllocator::new(memory_map).unwrap(),
+        OffsetMapper::new(VirtualAddr::new(0)),
+    )
+    .unwrap();
 
-    bootloader
-        .load_kernel(&mut frame_allocator)
-        .expect("unable to load the kernel");
+    let mut bootloader = bootloader
+        .load_kernel()
+        .unwrap()
+        .setup_stack(
+            CONFIG.kernel_stack_address.map(VirtualAddr::new),
+            CONFIG.kernel_stack_size,
+        )
+        .unwrap();
 
-    let (framebuffer_addr, framebuffer_info) = make_framebuffer_info();
+    let framebuffer = make_framebuffer();
 
     let system_info = SystemInfo {
-        framebuffer_addr,
-        framebuffer_info,
+        framebuffer_addr: PhysicalAddr::new(framebuffer.buffer_start),
+        framebuffer_info: framebuffer.info,
         rsdp_addr: detect_rsdp(),
     };
 
-    let (mappings, bootinfo) = bootloader::binary::load_and_switch_to_kernel(
-        &mut bootloader,
-        frame_allocator,
-        system_info,
-    );
+    let framebuffer_start = if CONFIG.map_framebuffer {
+        let start = bootloader
+            .map_framebuffer(
+                framebuffer,
+                CONFIG.framebuffer_address.map(VirtualAddr::new),
+            )
+            .unwrap();
+        Some(start)
+    } else {
+        None
+    };
 
-    bootloader.boot(mappings, bootinfo)
+    let mut mappings = bootloader::binary::set_up_mappings(&mut bootloader).unwrap();
+    let bootinfo = bootloader::binary::create_boot_info(
+        &mut bootloader,
+        &mut mappings,
+        framebuffer_start,
+        system_info,
+    )
+    .unwrap();
+
+    bootloader.boot(bootinfo)
 }
 
 fn detect_rsdp() -> Option<PhysicalAddr> {
     #[derive(Clone)]
     struct IdentityMapped;
+
     impl AcpiHandler for IdentityMapped {
         unsafe fn map_physical_region<T>(
             &self,
