@@ -68,7 +68,7 @@ for all possible configuration options.
 #![cfg_attr(not(feature = "builder"), no_std)]
 #![feature(maybe_uninit_slice)]
 #![deny(unsafe_op_in_unsafe_fn)]
-#![warn(missing_docs)]
+// TODO: reinstate #![warn(missing_docs)]
 
 #[cfg(feature = "binary")]
 #[macro_use]
@@ -90,12 +90,6 @@ pub mod boot_info;
 /// Only available when the `binary` feature is enabled.
 #[cfg(feature = "binary")]
 pub mod binary;
-
-/// Provides a function to turn a bootloader executable into a disk image.
-///
-/// Used by the `builder` binary. Only available when the `builder` feature is enabled.
-#[cfg(feature = "builder")]
-pub mod disk_image;
 
 #[cfg(all(target_arch = "x86", not(feature = "builder")))]
 compile_error!(

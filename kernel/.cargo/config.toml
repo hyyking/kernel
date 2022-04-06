@@ -1,9 +1,10 @@
 [build]
 target = "target.json"
-
-
-[target.'cfg(target_os = "none")']
-runner = "bootimage runner"
+rustflags = [
+    "-Z", "unstable-options", 
+    "-C", "strip=debuginfo",
+    "-C", "split-debuginfo=packed"
+]
 
 [unstable]
 build-std = ["core", "compiler_builtins", "alloc"]

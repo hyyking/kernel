@@ -1,37 +1,24 @@
 #![no_std]
 #![no_main]
+#![feature(step_trait)]
 
 use core::{
     arch::{asm, global_asm},
-    convert::TryFrom,
     panic::PanicInfo,
-    ptr::NonNull,
-    slice,
 };
 
 use bootloader::{
-    binary::memory::{BiosFrameAllocator, E820MemoryMap},
-    binary::{PageTables, SystemInfo},
+    binary::{
+        bootloader::{Bootloader, Kernel, KernelError},
+        memory::{BiosFrameAllocator, E820MemoryMap},
+        CONFIG,
+    },
     boot_info::{FrameBufferInfo, PixelFormat},
-};
-
-use rsdp::{
-    handler::{AcpiHandler, PhysicalMapping},
-    Rsdp,
 };
 
 use page_mapper::OffsetMapper;
 
-use libx64::{
-    address::{PhysicalAddr, VirtualAddr},
-    paging::{
-        entry::Flags,
-        frame::{FrameAllocator, FrameRange, PhysicalFrame},
-        page::PageMapper,
-        table::PageTable,
-        Page1Gb, Page2Mb, Page4Kb,
-    },
-};
+use libx64::address::{PhysicalAddr, VirtualAddr};
 
 global_asm!(include_str!("../asm/stage_1.s"));
 global_asm!(include_str!("../asm/stage_2.s"));
@@ -65,66 +52,26 @@ extern "C" {
 pub unsafe extern "C" fn stage_4() -> ! {
     // Set stack segment
     asm!(
-        "mov ax, 0x0; mov ss, ax",
+        "mov ax, 0x0;
+         mov ss, ax",
         out("ax") _,
     );
 
-    let kernel_start = 0x400000;
-    let kernel_size = &_kernel_size as *const _ as u64;
-    let memory_map_addr = &_memory_map as *const _ as u64;
-    let memory_map_entry_count = (mmap_ent & 0xff) as u64; // Extract lower 8 bits
+    let kernel = Kernel::new(
+        PhysicalAddr::new(0x400_000),
+        &_kernel_size as *const _ as u64,
+    );
 
-    bootloader_main(
-        PhysicalAddr::new(kernel_start),
-        kernel_size,
-        VirtualAddr::new(memory_map_addr),
-        memory_map_entry_count,
-    )
+    bootloader_main(kernel)
 }
 
-fn bootloader_main(
-    kernel_start: PhysicalAddr,
-    kernel_size: u64,
-    memory_map_addr: VirtualAddr,
-    memory_map_entry_count: u64,
-) -> ! {
-    qemu_logger::init().expect("unable to initialize logger");
-    log::info!(
-        "BIOS boot at {:?}",
-        PhysicalAddr::from_ptr(bootloader_main as *const ())
-    );
+fn make_framebuffer() -> (PhysicalAddr, FrameBufferInfo) {
+    let addr = PhysicalAddr::new(unsafe { u64::from(VBEModeInfo_physbaseptr) });
 
-    let kernel_end = PhysicalFrame::<Page4Kb>::containing(kernel_start + kernel_size - 1u64);
-    let next_free = PhysicalFrame::<Page4Kb>::containing(kernel_end.ptr() + Page4Kb);
+    let framebuffer_size =
+        unsafe { usize::from(VBEModeInfo_yresolution) * usize::from(VBEModeInfo_bytesperscanline) };
 
-    let memory_map = E820MemoryMap::from_memory(
-        memory_map_addr,
-        usize::try_from(memory_map_entry_count).unwrap(),
-        next_free,
-    );
-
-    let max_phys_addr = memory_map.max_phys_addr();
-    let mut frame_allocator = BiosFrameAllocator::new(memory_map).unwrap();
-
-    // We identity-map all memory, so the offset between physical and virtual addresses is 0
-    let phys_offset = VirtualAddr::new(0);
-
-    let mut bootloader_page_table = OffsetMapper::new(phys_offset);
-
-    // identity-map remaining physical memory (first gigabyte is already identity-mapped)
-    let start_frame = PhysicalFrame::<Page2Mb>::containing(PhysicalAddr::new(Page1Gb as u64));
-    let end_frame = PhysicalFrame::<Page2Mb>::containing(max_phys_addr);
-    for frame in FrameRange::new(start_frame, end_frame) {
-        bootloader_page_table
-            .id_map(frame, Flags::PRESENT | Flags::RW, &mut frame_allocator)
-            .unwrap()
-            .flush()
-    }
-
-    let framebuffer_addr = PhysicalAddr::new(unsafe { u64::from(VBEModeInfo_physbaseptr) });
-    let framebuffer_info = unsafe {
-        let framebuffer_size =
-            usize::from(VBEModeInfo_yresolution) * usize::from(VBEModeInfo_bytesperscanline);
+    let info = unsafe {
         let bytes_per_pixel = VBEModeInfo_bitsperpixel / 8;
 
         let pixel_format = match (
@@ -146,88 +93,85 @@ fn bootloader_main(
             pixel_format,
         }
     };
+    (addr, info)
+}
 
-    let page_tables = create_page_tables(&mut frame_allocator);
-
-    let kernel = {
-        let ptr = kernel_start.as_u64() as *const u8;
-        unsafe { slice::from_raw_parts(ptr, usize::try_from(kernel_size).unwrap()) }
-    };
-
-    let system_info = SystemInfo {
-        framebuffer_addr,
-        framebuffer_info,
-        rsdp_addr: detect_rsdp(),
-    };
-    bootloader::binary::load_and_switch_to_kernel(
-        kernel,
-        frame_allocator,
-        page_tables,
-        system_info,
+fn bootloader_main(kernel: Result<Kernel, KernelError>) -> ! {
+    qemu_logger::init().expect("unable to initialize logger");
+    log::info!(
+        "BIOS boot at {:?}",
+        PhysicalAddr::from_ptr(bootloader_main as *const ())
     );
-}
+    let kernel = kernel.expect("invalid kernel no booting will be attempted");
 
-/// Creates page table abstraction types for both the bootloader and kernel page tables.
-fn create_page_tables(frame_allocator: &mut impl FrameAllocator<Page4Kb>) -> PageTables {
-    // We identity-mapped all memory, so the offset between physical and virtual addresses is 0
-    let phys_offset = VirtualAddr::new(0);
-
-    // copy the currently active level 4 page table, because it might be read-only
-    let bootloader_page_table = OffsetMapper::new(phys_offset);
-
-    // create a new page table hierarchy for the kernel
-    let (kernel_page_table, kernel_level_4_frame) = {
-        let frame = frame_allocator.alloc().expect("no unused frames");
-        let addr = phys_offset + frame.ptr().as_u64();
-        let kernel = unsafe {
-            let ptr = addr.ptr().unwrap().as_mut();
-            *ptr = PageTable::new_zero();
-            OffsetMapper::from_p4(core::pin::Pin::new_unchecked(ptr), phys_offset)
-        };
-        (kernel, frame)
+    // Extract lower 8 bits
+    let memory_map = unsafe {
+        E820MemoryMap::from_memory(
+            VirtualAddr::new(&_memory_map as *const _ as u64),
+            usize::try_from((mmap_ent & 0xff) as u64).unwrap(),
+            core::iter::Step::forward(kernel.frames().last().unwrap(), 1),
+        )
     };
-    log::info!("Kernel page table at: {:?}", &kernel_level_4_frame);
 
-    PageTables {
-        bootloader: bootloader_page_table,
-        kernel: kernel_page_table,
-        kernel_level_4_frame,
+    // We identity-map all memory, so the offset between physical and virtual addresses is 0
+    let bootloader = Bootloader::<OffsetMapper, _, _>::new(
+        kernel,
+        BiosFrameAllocator::new(memory_map).unwrap(),
+        OffsetMapper::new(VirtualAddr::new(0)),
+        CONFIG.boot_info_address.map(VirtualAddr::new),
+    )
+    .unwrap();
+
+    let mut bootloader = bootloader
+        .load_kernel()
+        .unwrap()
+        .setup_stack(
+            CONFIG.kernel_stack_address.map(VirtualAddr::new),
+            CONFIG.kernel_stack_size,
+        )
+        .unwrap();
+
+    enable_write_protect_bit();
+
+    if CONFIG.map_framebuffer {
+        let (start, info) = make_framebuffer();
+
+        bootloader
+            .map_framebuffer(
+                start,
+                info,
+                CONFIG.framebuffer_address.map(VirtualAddr::new),
+            )
+            .unwrap();
     }
-}
 
-fn detect_rsdp() -> Option<PhysicalAddr> {
-    #[derive(Clone)]
-    struct IdentityMapped;
-    impl AcpiHandler for IdentityMapped {
-        unsafe fn map_physical_region<T>(
-            &self,
-            physical_address: usize,
-            size: usize,
-        ) -> PhysicalMapping<Self, T> {
-            PhysicalMapping {
-                physical_start: physical_address,
-                virtual_start: NonNull::new(physical_address as *mut _).unwrap(),
-                region_length: size,
-                mapped_length: size,
-                handler: Self,
-            }
-        }
+    bootloader.detect_rsdp();
 
-        fn unmap_physical_region<T>(&self, _region: &PhysicalMapping<Self, T>) {}
-    }
+    // NOTE: this could be an opt-in, see other methods (ie. id mapping, offset, temporary, recursive level4)
+    // right now this is kinda needed as their is no way to use another method else
+    bootloader
+        .map_physical_memory(VirtualAddr::new(0x10_0000_0000))
+        .expect("couldn't map physical memory");
 
-    unsafe {
-        Rsdp::search_for_on_bios(IdentityMapped)
-            .ok()
-            .map(|mapping| PhysicalAddr::new(mapping.physical_start as u64))
-    }
+    bootloader.boot()
 }
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     log::error!("[PANIC]: {}", info);
-    loop {
-        libx64::cli();
-        libx64::hlt();
-    }
+    libx64::diverging_hlt()
+}
+
+/* NOTE: My cpu doesn't support EFER.NX see CPUID feature section 4.1.4 Intel manual
+#[inline]
+fn enable_nxe_bit() {
+    use libx64::control::{efer, set_efer, Efer};
+    set_efer(efer() | Efer::NXE);
+}
+*/
+
+#[inline]
+fn enable_write_protect_bit() {
+    use libx64::control::{cr0, set_cr0, CR0};
+    set_cr0(cr0() | CR0::WP);
 }

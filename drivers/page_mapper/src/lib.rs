@@ -45,15 +45,11 @@ impl OffsetMapper {
     }
 
     #[must_use]
-    pub unsafe fn from_p4(level4: PinTableMut<'_, Level4>, offset: VirtualAddr) -> Self {
+    unsafe fn from_p4(level4: PinTableMut<'_, Level4>, offset: VirtualAddr) -> Self {
         Self {
             offset,
             walker: PageWalker::new_with_level4(OffsetWalker::new(offset), level4),
         }
-    }
-
-    pub fn level4(&mut self) -> PinTableMut<'_, Level4> {
-        self.walker.level4()
     }
 }
 
@@ -64,6 +60,14 @@ impl PageTranslator for OffsetMapper {
 }
 
 impl PageMapper<Page4Kb> for OffsetMapper {
+    unsafe fn from_level4(page: PinTableMut<'_, Level4>) -> Self {
+        Self::from_p4(page, VirtualAddr::new(0))
+    }
+
+    fn level4(&mut self) -> PinTableMut<'_, Level4> {
+        self.walker.level4()
+    }
+
     #[must_use]
     fn map<A>(
         &mut self,
@@ -169,6 +173,14 @@ impl PageMapper<Page4Kb> for OffsetMapper {
 }
 
 impl PageMapper<Page2Mb> for OffsetMapper {
+    unsafe fn from_level4(page: PinTableMut<'_, Level4>) -> Self {
+        Self::from_p4(page, VirtualAddr::new(0))
+    }
+
+    fn level4(&mut self) -> PinTableMut<'_, Level4> {
+        self.walker.level4()
+    }
+
     #[must_use]
     fn map<A>(
         &mut self,
@@ -259,6 +271,14 @@ impl PageMapper<Page2Mb> for OffsetMapper {
 }
 
 impl PageMapper<Page1Gb> for OffsetMapper {
+    unsafe fn from_level4(page: PinTableMut<'_, Level4>) -> Self {
+        Self::from_p4(page, VirtualAddr::new(0))
+    }
+
+    fn level4(&mut self) -> PinTableMut<'_, Level4> {
+        self.walker.level4()
+    }
+
     #[must_use]
     fn map<A>(
         &mut self,

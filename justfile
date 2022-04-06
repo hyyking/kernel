@@ -35,6 +35,15 @@ image: kernel bootloader
     cd kernel && cargo build
     printf "\e[32;1m[1/3] Kernel build successful\n\e[0m"
 
-@bootloader $KERNEL=`find ~+ -type f -name kernel` $RUSTFLAGS="-C opt-level=z":
+bootloader $KERNEL=`find ~+ -type f -name kernel`:
+    #!/usr/bin/zsh
+    KERNEL_TEXT_SIZE=$(llvm-size $KERNEL | awk '(NR == 2) {print $1}')
+    
+    echo $KERNEl
+    if [[ $KERNEL_TEXT_SIZE -eq 0 ]] then
+        echo "Kernel has 0 text size, please define an entry point"
+        exit 1
+    fi
+
     cd bootloader && cargo build --bin bios --release --features bios_bin 
     printf "\e[32;1m[2/3] Bootloader build successful\n\e[0m"
