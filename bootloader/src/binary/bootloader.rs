@@ -1,6 +1,12 @@
-use core::arch::asm;
+use core::{arch::asm, mem::MaybeUninit, ptr::addr_of_mut};
 
-use crate::binary::{memory::BootFrameAllocator, Addresses, TlsTemplate, UsedLevel4Entries};
+use crate::{
+    binary::{
+        memory::BootFrameAllocator, Addresses, FrameBuffer, FrameBufferInfo, UsedLevel4Entries,
+    },
+    boot_info::MemoryRegion,
+    BootInfo,
+};
 
 use libx64::{
     address::{PhysicalAddr, VirtualAddr},
@@ -43,7 +49,6 @@ impl Kernel {
 pub struct LoadedKernel {
     pub kernel: Kernel,
     pub entrypoint: VirtualAddr,
-    pub tls: Option<TlsTemplate>,
 }
 
 pub struct NoStack;
@@ -69,9 +74,13 @@ pub struct Bootloader<KM, BM, A, K = Kernel, S = NoStack> {
     pub kernel: K,
     kernel_offset: VirtualAddr,
     stack: S,
+
     bootloader_mapper: BM,
     kernel_mapper: KM,
     allocator: A,
+
+    bootinfo: &'static mut MaybeUninit<BootInfo>,
+    memory_map: &'static mut [MaybeUninit<MemoryRegion>],
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -106,7 +115,12 @@ where
     KM: PageMapper<Page4Kb> + PageMapper<Page2Mb> + PageTranslator,
     BM: PageMapper<Page4Kb> + PageMapper<Page2Mb> + FrameTranslator<(), Page4Kb>,
 {
-    pub fn new(kernel: Kernel, mut allocator: A, mapper: BM) -> Result<Self, BootloaderError> {
+    pub fn new(
+        kernel: Kernel,
+        mut allocator: A,
+        mapper: BM,
+        bootinfo_addr: Option<VirtualAddr>,
+    ) -> Result<Self, BootloaderError> {
         if !kernel.start.is_aligned(Page4Kb as u64) {
             return Err(BootloaderError::MalformedKernel);
         }
@@ -129,23 +143,33 @@ where
 
         info!("Elf file loaded at {:?}", kernel.frames());
 
-        let (mut kernel_mapper, bootloader_mapper) = Self::create_mappers(&mut allocator, mapper);
+        let (mut kernel_mapper, mut bootloader_mapper) =
+            Self::create_mappers(&mut allocator, mapper);
 
-        trace!("Mapping GDT");
-        crate::binary::gdt::create_and_load(&mut kernel_mapper, &mut allocator).unwrap();
+        crate::binary::gdt::create_and_load(&mut kernel_mapper, &mut allocator)?;
+
+        let mut entries = UsedLevel4Entries::new();
+        let bootinfo_addr = bootinfo_addr.unwrap_or_else(|| entries.get_free_address());
+        let (bootinfo, memory_map) = crate::binary::create_boot_info(
+            bootinfo_addr,
+            &mut kernel_mapper,
+            &mut bootloader_mapper,
+            &mut allocator,
+        )?;
 
         let mut this = Self {
-            entries: UsedLevel4Entries::new(),
+            entries,
             kernel,
             kernel_offset,
             kernel_mapper,
             bootloader_mapper,
             allocator,
             stack: NoStack,
+            bootinfo,
+            memory_map,
         };
 
         this.id_map_virtual_memory()?;
-
         Ok(this)
     }
 
@@ -204,13 +228,16 @@ where
             .load_segments()
             .map_err(|err| BootloaderError::ElfLoader(err))?;
 
+        unsafe {
+            addr_of_mut!((*self.bootinfo.as_mut_ptr()).tls_template).write(tls.into());
+        }
+
         info!("Entry point at {:?}", entrypoint);
 
         Ok(Bootloader {
             kernel: LoadedKernel {
                 kernel: self.kernel,
                 entrypoint,
-                tls,
             },
             entries: self.entries,
             kernel_offset: self.kernel_offset,
@@ -218,6 +245,8 @@ where
             kernel_mapper: self.kernel_mapper,
             allocator: self.allocator,
             stack: self.stack,
+            bootinfo: self.bootinfo,
+            memory_map: self.memory_map,
         })
     }
 }
@@ -255,6 +284,8 @@ where
             kernel_mapper: self.kernel_mapper,
             allocator: self.allocator,
             stack,
+            bootinfo: self.bootinfo,
+            memory_map: self.memory_map,
         })
     }
 }
@@ -265,19 +296,40 @@ where
     KM: PageMapper<Page4Kb> + PageMapper<Page2Mb> + PageTranslator,
     BM: PageMapper<Page4Kb> + PageMapper<Page2Mb> + FrameTranslator<(), Page4Kb>,
 {
+    pub fn map_physical_memory(&mut self, offset: VirtualAddr) -> Result<(), BootloaderError> {
+        info!("Mapping physical memory");
+
+        let max_phys = self.allocator.max_physical_address();
+
+        let memory = FrameRange::<Page2Mb>::new_addr(PhysicalAddr::new(0), max_phys);
+        self.kernel_mapper.map_range(
+            memory
+                .clone()
+                .map(|frame| Page::<Page2Mb>::containing(offset + frame.ptr().as_u64())),
+            memory,
+            Flags::PRESENT | Flags::RW,
+            &mut self.allocator,
+            TlbMethod::Ignore,
+        )?;
+
+        unsafe {
+            addr_of_mut!((*self.bootinfo.as_mut_ptr()).physical_memory_offset)
+                .write(offset.as_u64());
+        }
+
+        Ok(())
+    }
+
     pub fn map_framebuffer(
         &mut self,
-        framebuffer: crate::binary::FrameBuffer,
+        buffer_start: PhysicalAddr,
+        info: FrameBufferInfo,
         location: Option<VirtualAddr>,
-    ) -> Result<VirtualAddr, BootloaderError> {
-        let frames = FrameRange::<Page4Kb>::with_size(
-            PhysicalAddr::new(framebuffer.buffer_start),
-            framebuffer.buffer_byte_len as u64,
-        );
+    ) -> Result<(), BootloaderError> {
+        let frames = FrameRange::<Page4Kb>::with_size(buffer_start, info.byte_len as u64);
 
         let location = location.unwrap_or_else(|| self.entries.get_free_address());
-        let pages = PageRange::<Page4Kb>::with_size(location, framebuffer.buffer_byte_len as u64);
-        let page_start = pages.start();
+        let pages = PageRange::<Page4Kb>::with_size(location, info.byte_len as u64);
 
         info!("Mapping framebuffer at {:?} to {:?}", frames, pages);
 
@@ -289,18 +341,64 @@ where
             TlbMethod::Ignore,
         )?;
 
-        Ok(page_start)
+        unsafe {
+            addr_of_mut!((*self.bootinfo.as_mut_ptr()).framebuffer).write(
+                Some(FrameBuffer {
+                    buffer_start: location.as_u64(),
+                    buffer_byte_len: info.byte_len,
+                    info,
+                })
+                .into(),
+            );
+        }
+
+        Ok(())
+    }
+
+    pub fn detect_rsdp(&mut self) {
+        info!("Detecting root system descriptor page table");
+        use rsdp::{
+            handler::{AcpiHandler, PhysicalMapping},
+            Rsdp,
+        };
+
+        #[derive(Clone)]
+        struct IdentityMapped;
+
+        impl AcpiHandler for IdentityMapped {
+            unsafe fn map_physical_region<T>(
+                &self,
+                physical_address: usize,
+                size: usize,
+            ) -> PhysicalMapping<Self, T> {
+                PhysicalMapping {
+                    physical_start: physical_address,
+                    virtual_start: core::ptr::NonNull::new(physical_address as *mut _).unwrap(),
+                    region_length: size,
+                    mapped_length: size,
+                    handler: Self,
+                }
+            }
+
+            fn unmap_physical_region<T>(&self, _region: &PhysicalMapping<Self, T>) {}
+        }
+
+        unsafe {
+            let rsdp = Rsdp::search_for_on_bios(IdentityMapped)
+                .ok()
+                .map(|mapping| mapping.physical_start as u64);
+            addr_of_mut!((*self.bootinfo.as_mut_ptr()).rsdp_addr).write(rsdp.into());
+        }
     }
 
     #[cold]
-    pub fn boot(mut self, boot_info: &'static mut crate::BootInfo) -> ! {
+    pub fn boot(mut self) -> ! {
         // identity-map context switch function, so that we don't get an immediate pagefault
         // after switching the active page table
         info!(
             "Mapping context switch at {:?}",
             VirtualAddr::from_ptr(context_switch as *const ())
         );
-
         self.kernel_mapper
             .id_map(
                 PhysicalFrame::<Page4Kb>::containing_ptr(context_switch as *const ()),
@@ -310,6 +408,16 @@ where
             .map(libx64::paging::page::TlbFlush::ignore)
             .expect("unable to map context switch");
 
+        // create memory regions in the boot info
+        let memory_regions = self
+            .allocator
+            .write_memory_map(self.memory_map)
+            .expect("unable to write memory map");
+        unsafe {
+            addr_of_mut!((*self.bootinfo.as_mut_ptr()).memory_regions).write(memory_regions.into());
+        }
+
+        // prepare addresses
         let addresses = crate::binary::Addresses {
             page_table: PhysicalFrame::<Page4Kb>::containing_ptr(
                 <KM as PageMapper<Page4Kb>>::level4(&mut self.kernel_mapper)
@@ -318,7 +426,7 @@ where
             ),
             stack_top: self.stack.end().ptr(),
             entry_point: self.kernel.entrypoint,
-            boot_info,
+            boot_info: unsafe { self.bootinfo.assume_init_mut() },
         };
 
         info!(
@@ -326,6 +434,7 @@ where
             addresses.entry_point
         );
 
+        // yolo. (at least we have a kernel and a stack :^)
         unsafe { context_switch(addresses) }
     }
 }

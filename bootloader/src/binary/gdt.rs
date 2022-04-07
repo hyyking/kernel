@@ -20,10 +20,10 @@ where
     let gdt_frame = alloc.alloc()?;
     let phys_addr = gdt_frame.ptr();
 
-    info!("Creating GDT at {:?}", phys_addr);
+    info!("Creating a GDT at {:?}", phys_addr);
     let virt_addr = VirtualAddr::new(phys_addr.as_u64()); // utilize identity mapping
 
-    let ptr: core::ptr::NonNull<GlobalDescriptorTable> = virt_addr.ptr().unwrap();
+    let ptr = virt_addr.ptr::<GlobalDescriptorTable>().unwrap();
 
     let mut gdt = GlobalDescriptorTable::new();
 

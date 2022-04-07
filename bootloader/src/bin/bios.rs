@@ -5,21 +5,15 @@
 use core::{
     arch::{asm, global_asm},
     panic::PanicInfo,
-    ptr::NonNull,
 };
 
 use bootloader::{
     binary::{
         bootloader::{Bootloader, Kernel},
         memory::{BiosFrameAllocator, E820MemoryMap},
-        SystemInfo, CONFIG,
+        CONFIG,
     },
-    boot_info::{FrameBuffer, FrameBufferInfo, PixelFormat},
-};
-
-use rsdp::{
-    handler::{AcpiHandler, PhysicalMapping},
-    Rsdp,
+    boot_info::{FrameBufferInfo, PixelFormat},
 };
 
 use page_mapper::OffsetMapper;
@@ -78,7 +72,7 @@ pub unsafe extern "C" fn stage_4() -> ! {
     bootloader_main(kernel, memory_map)
 }
 
-fn make_framebuffer() -> FrameBuffer {
+fn make_framebuffer() -> (PhysicalAddr, FrameBufferInfo) {
     let addr = PhysicalAddr::new(unsafe { u64::from(VBEModeInfo_physbaseptr) });
 
     let framebuffer_size =
@@ -106,12 +100,7 @@ fn make_framebuffer() -> FrameBuffer {
             pixel_format,
         }
     };
-
-    FrameBuffer {
-        buffer_start: addr.as_u64(),
-        buffer_byte_len: framebuffer_size,
-        info,
-    }
+    (addr, info)
 }
 
 fn bootloader_main(kernel: Kernel, memory_map: E820MemoryMap<'static>) -> ! {
@@ -126,6 +115,7 @@ fn bootloader_main(kernel: Kernel, memory_map: E820MemoryMap<'static>) -> ! {
         kernel,
         BiosFrameAllocator::new(memory_map).unwrap(),
         OffsetMapper::new(VirtualAddr::new(0)),
+        CONFIG.boot_info_address.map(VirtualAddr::new),
     )
     .unwrap();
 
@@ -138,69 +128,47 @@ fn bootloader_main(kernel: Kernel, memory_map: E820MemoryMap<'static>) -> ! {
         )
         .unwrap();
 
-    let framebuffer = make_framebuffer();
+    enable_write_protect_bit();
 
-    let system_info = SystemInfo {
-        framebuffer_addr: PhysicalAddr::new(framebuffer.buffer_start),
-        framebuffer_info: framebuffer.info,
-        rsdp_addr: detect_rsdp(),
-    };
+    if CONFIG.map_framebuffer {
+        let (start, info) = make_framebuffer();
 
-    let framebuffer_start = if CONFIG.map_framebuffer {
-        let start = bootloader
+        bootloader
             .map_framebuffer(
-                framebuffer,
+                start,
+                info,
                 CONFIG.framebuffer_address.map(VirtualAddr::new),
             )
             .unwrap();
-        Some(start)
-    } else {
-        None
-    };
-
-    let mut mappings = bootloader::binary::set_up_mappings(&mut bootloader).unwrap();
-    let bootinfo = bootloader::binary::create_boot_info(
-        &mut bootloader,
-        &mut mappings,
-        framebuffer_start,
-        system_info,
-    )
-    .unwrap();
-
-    bootloader.boot(bootinfo)
-}
-
-fn detect_rsdp() -> Option<PhysicalAddr> {
-    #[derive(Clone)]
-    struct IdentityMapped;
-
-    impl AcpiHandler for IdentityMapped {
-        unsafe fn map_physical_region<T>(
-            &self,
-            physical_address: usize,
-            size: usize,
-        ) -> PhysicalMapping<Self, T> {
-            PhysicalMapping {
-                physical_start: physical_address,
-                virtual_start: NonNull::new(physical_address as *mut _).unwrap(),
-                region_length: size,
-                mapped_length: size,
-                handler: Self,
-            }
-        }
-
-        fn unmap_physical_region<T>(&self, _region: &PhysicalMapping<Self, T>) {}
     }
 
-    unsafe {
-        Rsdp::search_for_on_bios(IdentityMapped)
-            .ok()
-            .map(|mapping| PhysicalAddr::new(mapping.physical_start as u64))
-    }
+    bootloader.detect_rsdp();
+
+    // NOTE: this could be an opt-in, see other methods (ie. id mapping, offset, temporary, recursive level4)
+    // right now this is kinda needed as their is no way to use another method else
+    bootloader
+        .map_physical_memory(VirtualAddr::new(0x10_0000_0000))
+        .expect("couldn't map physical memory");
+
+    bootloader.boot()
 }
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     log::error!("[PANIC]: {}", info);
     libx64::diverging_hlt()
+}
+
+/* NOTE: My cpu doesn't support EFER.NX see CPUID feature section 4.1.4 Intel manual
+#[inline]
+fn enable_nxe_bit() {
+    use libx64::control::{efer, set_efer, Efer};
+    set_efer(efer() | Efer::NXE);
+}
+*/
+
+#[inline]
+fn enable_write_protect_bit() {
+    use libx64::control::{cr0, set_cr0, CR0};
+    set_cr0(cr0() | CR0::WP);
 }
