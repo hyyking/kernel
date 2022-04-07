@@ -10,13 +10,12 @@ use crate::{
 };
 
 use level_4_entries::UsedLevel4Entries;
-pub use parsed_config::CONFIG;
 
 use libx64::{
     address::VirtualAddr,
     paging::{
         entry::Flags,
-        frame::{FrameError, PhysicalFrame},
+        frame::FrameError,
         page::{Page, PageMapper, PageRangeInclusive, TlbFlush},
         Page4Kb,
     },
@@ -47,6 +46,7 @@ pub mod memory;
 //
 // The module file is created by the build script.
 include!(concat!(env!("OUT_DIR"), "/bootloader_config.rs"));
+pub use parsed_config::CONFIG;
 
 /// Allocates and initializes the boot info struct and the memory map.
 ///
@@ -126,22 +126,6 @@ where
         addr_of_mut!((*boot_info.as_mut_ptr()).rsdp_addr).write(None.into());
     }
 
-    // At this point only the memory map should not have a sensible default and will be created before boot
+    // NOTE: At this point only the memory map, and physical memory offset should not have a sensible default and must be created before boot
     Ok((boot_info, memory_regions))
-
-    /*
-    // create boot info
-    let boot_info = boot_info.write(BootInfo {
-        physical_memory_offset: mappings.physical_memory_offset.as_u64(),
-    });
-
-    */
-}
-
-/// Memory addresses required for the context switch.
-struct Addresses {
-    page_table: PhysicalFrame<Page4Kb>,
-    stack_top: VirtualAddr,
-    entry_point: VirtualAddr,
-    boot_info: &'static mut crate::boot_info::BootInfo,
 }

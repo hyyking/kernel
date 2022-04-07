@@ -9,7 +9,7 @@ use core::{
 
 use bootloader::{
     binary::{
-        bootloader::{Bootloader, Kernel},
+        bootloader::{Bootloader, Kernel, KernelError},
         memory::{BiosFrameAllocator, E820MemoryMap},
         CONFIG,
     },
@@ -58,18 +58,11 @@ pub unsafe extern "C" fn stage_4() -> ! {
     );
 
     let kernel = Kernel::new(
-        PhysicalAddr::new(0x400000),
+        PhysicalAddr::new(0x400_000),
         &_kernel_size as *const _ as u64,
     );
 
-    // Extract lower 8 bits
-    let memory_map = E820MemoryMap::from_memory(
-        VirtualAddr::new(&_memory_map as *const _ as u64),
-        usize::try_from((mmap_ent & 0xff) as u64).unwrap(),
-        core::iter::Step::forward(kernel.frames().last().unwrap(), 1),
-    );
-
-    bootloader_main(kernel, memory_map)
+    bootloader_main(kernel)
 }
 
 fn make_framebuffer() -> (PhysicalAddr, FrameBufferInfo) {
@@ -103,12 +96,22 @@ fn make_framebuffer() -> (PhysicalAddr, FrameBufferInfo) {
     (addr, info)
 }
 
-fn bootloader_main(kernel: Kernel, memory_map: E820MemoryMap<'static>) -> ! {
+fn bootloader_main(kernel: Result<Kernel, KernelError>) -> ! {
     qemu_logger::init().expect("unable to initialize logger");
     log::info!(
         "BIOS boot at {:?}",
         PhysicalAddr::from_ptr(bootloader_main as *const ())
     );
+    let kernel = kernel.expect("invalid kernel no booting will be attempted");
+
+    // Extract lower 8 bits
+    let memory_map = unsafe {
+        E820MemoryMap::from_memory(
+            VirtualAddr::new(&_memory_map as *const _ as u64),
+            usize::try_from((mmap_ent & 0xff) as u64).unwrap(),
+            core::iter::Step::forward(kernel.frames().last().unwrap(), 1),
+        )
+    };
 
     // We identity-map all memory, so the offset between physical and virtual addresses is 0
     let bootloader = Bootloader::<OffsetMapper, _, _>::new(

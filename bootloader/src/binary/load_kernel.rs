@@ -29,7 +29,7 @@ pub struct Loader<'a, F, M> {
 
 struct Inner<'a, F, M> {
     kernel: &'a Kernel,
-    virtual_address_offset: VirtualAddr,
+
     page_table: &'a mut M,
     frame_allocator: &'a mut F,
 }
@@ -39,16 +39,11 @@ where
     F: FrameAllocator<Page4Kb>,
     M: PageMapper<Page4Kb> + PageTranslator,
 {
-    pub fn new(
-        kernel: &'a Kernel,
-        virtual_address_offset: VirtualAddr,
-        page_table: &'a mut M,
-        frame_allocator: &'a mut F,
-    ) -> Self {
+    pub fn new(kernel: &'a Kernel, page_table: &'a mut M, frame_allocator: &'a mut F) -> Self {
         Loader {
             inner: Inner {
                 kernel,
-                virtual_address_offset,
+
                 page_table,
                 frame_allocator,
             },
@@ -119,7 +114,7 @@ where
             (phys_start_addr + segment.file_size()).align_up(Page4Kb as u64),
         );
 
-        let virt_start_addr = self.virtual_address_offset + segment.virtual_addr();
+        let virt_start_addr = self.kernel.offset() + segment.virtual_addr();
         let start_page = Page::<Page4Kb>::containing(virt_start_addr);
 
         let mut segment_flags = Flags::PRESENT;
@@ -159,7 +154,7 @@ where
     ) -> Result<(), FrameError> {
         info!("Mapping bss section");
 
-        let virt_start_addr = self.virtual_address_offset + segment.virtual_addr();
+        let virt_start_addr = self.kernel.offset() + segment.virtual_addr();
         let mem_size = segment.mem_size();
         let file_size = segment.file_size();
 
@@ -297,7 +292,7 @@ where
             .program_iter()
             .filter(|ph| ph.get_type().unwrap() == Type::Load)
         {
-            let start = self.virtual_address_offset + program_header.virtual_addr();
+            let start = self.kernel.offset() + program_header.virtual_addr();
             let end = start + program_header.mem_size();
             let start_page = Page::<Page4Kb>::containing(start);
             let end_page = Page::<Page4Kb>::containing(end);
@@ -326,7 +321,7 @@ where
 
     fn handle_tls_segment(&mut self, segment: ProgramHeader) -> Result<TlsTemplate, &'static str> {
         Ok(TlsTemplate {
-            start_addr: self.virtual_address_offset.as_u64() + segment.virtual_addr(),
+            start_addr: self.kernel.offset().as_u64() + segment.virtual_addr(),
             mem_size: segment.mem_size(),
             file_size: segment.file_size(),
         })
@@ -422,8 +417,8 @@ where
                 // R_AMD64_RELATIVE
                 8 => {
                     check_is_in_load(elf_file, rela.get_offset())?;
-                    let addr = self.virtual_address_offset + rela.get_offset();
-                    let value = self.virtual_address_offset + rela.get_addend();
+                    let addr = self.kernel.offset() + rela.get_offset();
+                    let value = self.kernel.offset() + rela.get_addend();
 
                     if addr.as_usize() % align_of::<u64>() != 0 {
                         return Err("destination of relocation is not aligned");
