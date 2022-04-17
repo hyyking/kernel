@@ -22,6 +22,10 @@ members = [
     "drivers/serialuart16550",
 ]
 
+exclude = [
+    "utils/tracing"
+]
+
 [profile.dev]
 panic = "abort"
 

@@ -1,2 +1,0 @@
-[alias]
-builder = "run --bin builder --features builder --quiet --"

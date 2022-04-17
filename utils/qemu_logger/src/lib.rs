@@ -64,7 +64,7 @@ fn _qprint_encode(message: LogMessage<'_>) {
         rkyv::Infallible,
     );
 
-    let n = buffer.serialize_unsized_value(&message).unwrap() + SIZE_PAD; //.expect("lol");
+    let n = buffer.serialize_unsized_value(&message).unwrap() + SIZE_PAD;
 
     let (buffer, scratch, _) = buffer.into_components();
 
@@ -114,6 +114,7 @@ impl log::Log for Logger {
                 path: file!(),
                 message: "oom formating log",
             });
+            return;
         }
 
         let message = unsafe { core::str::from_utf8_unchecked(cursor.buffer()) };
