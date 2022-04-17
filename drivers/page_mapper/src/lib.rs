@@ -1,7 +1,7 @@
 #![no_std]
 
 #[macro_use]
-extern crate log;
+extern crate tracing;
 
 pub mod offset;
 pub mod walker;
