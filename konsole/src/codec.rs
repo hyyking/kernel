@@ -3,7 +3,7 @@ use std::io;
 use bytes::BytesMut;
 use rkyv::{util, Archive};
 
-use protocols::log::{LogHeader, LogMessage, HEADER_SIZE};
+use protocols::log::{LogHeader, LogPacket, HEADER_SIZE};
 
 enum DecoderState {
     WaitingForHeader,
@@ -24,7 +24,7 @@ impl LogDecoder {
     pub fn decode_ref<'a>(
         &mut self,
         src: &'a mut BytesMut,
-    ) -> Result<Option<&'a <LogMessage as Archive>::Archived>, io::Error> {
+    ) -> Result<Option<(usize, &'a <LogPacket as Archive>::Archived)>, io::Error> {
         match self.state {
             DecoderState::WaitingForHeader => {
                 if src.len() < HEADER_SIZE {
@@ -47,9 +47,9 @@ impl LogDecoder {
             }
             DecoderState::ReadingMessage(n) => {
                 if src.len() >= n {
-                    let message = unsafe { util::archived_unsized_root::<LogMessage>(&src[..n]) };
+                    let message = unsafe { util::archived_unsized_root::<LogPacket>(&src[..n]) };
                     self.state = DecoderState::WaitingForHeader;
-                    return Ok(Some(message));
+                    return Ok(Some((n, message)));
                 }
                 return Ok(None);
             }

@@ -34,11 +34,28 @@ pub struct LogHeader {
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
-pub struct LogMessage<'a> {
+pub enum LogPacket<'a> {
+    NewSpan(Span<'a>),
+    Message(Message<'a>),
+    EnterSpan(u64),
+    ExitSpan(u64)
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
+pub struct Span<'a> {
+    pub id: u64,
+    #[with(RefAsBox)]
+    pub target: &'a str
+}
+
+
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
+pub struct Message<'a> {
     pub level: Level,
     pub line: u32,
 
-    #[with(rkyv::with::RefAsBox)]
+    #[with(RefAsBox)]
     pub path: &'a str,
 
     #[with(RefAsBox)]

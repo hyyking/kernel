@@ -2,7 +2,7 @@ mod codec;
 
 use std::io;
 
-use protocols::log::ArchivedLevel;
+use protocols::log::{ArchivedLevel, ArchivedLogPacket};
 
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -29,10 +29,32 @@ async fn main() -> io::Result<()> {
         if n == 0 {
             return Ok(());
         }
-        let message = match codec.decode_ref(&mut bytes)? {
-            Some(message) => message,
+
+        let (n, message) = match codec.decode_ref(&mut bytes)? {
+            Some((n, message)) => (n, message),
             None => continue,
         };
+
+        let message = match Some(message) {
+            Some(ArchivedLogPacket::Message(message)) => message,
+            Some(ArchivedLogPacket::NewSpan(span)) => {
+                dbg!("new", span.id, &*span.target);
+                bytes.clear();
+                continue
+            },
+            Some(ArchivedLogPacket::EnterSpan(span)) => {
+                dbg!("enter", span);
+                bytes.clear();
+                continue
+            },
+            Some(ArchivedLogPacket::ExitSpan(span)) => {
+                dbg!("exit", span);
+                bytes.clear();
+                continue
+            },
+            None => continue,
+        };
+
         let fmt_log = match message.level {
             ArchivedLevel::Error => {
                 format!(
@@ -69,7 +91,7 @@ async fn main() -> io::Result<()> {
 
         stdout.write_all(fmt_log.as_bytes()).await?;
         stdout.write(b"\n").await?;
-        bytes.clear();
+        drop(bytes.split_to(n));
     }
     Ok(())
 }
