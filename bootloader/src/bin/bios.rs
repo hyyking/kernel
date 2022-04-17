@@ -2,6 +2,10 @@
 #![no_main]
 #![feature(step_trait)]
 
+
+#[macro_use]
+extern crate tracing;
+
 use core::{
     arch::{asm, global_asm},
     panic::PanicInfo,
@@ -61,6 +65,7 @@ pub unsafe extern "C" fn stage_4() -> ! {
         PhysicalAddr::new(0x400_000),
         &_kernel_size as *const _ as u64,
     );
+    qemu_logger::init().expect("unable to initialize logger");
 
     bootloader_main(kernel)
 }
@@ -96,9 +101,13 @@ fn make_framebuffer() -> (PhysicalAddr, FrameBufferInfo) {
     (addr, info)
 }
 
+
 fn bootloader_main(kernel: Result<Kernel, KernelError>) -> ! {
-    qemu_logger::init().expect("unable to initialize logger");
-    log::info!(
+
+    let span = info_span!("bootloader");
+    let entered = span.enter();
+
+    info!(
         "BIOS boot at {:?}",
         PhysicalAddr::from_ptr(bootloader_main as *const ())
     );
@@ -153,12 +162,13 @@ fn bootloader_main(kernel: Result<Kernel, KernelError>) -> ! {
         .map_physical_memory(VirtualAddr::new(0x10_0000_0000))
         .expect("couldn't map physical memory");
 
+    drop(entered);
     bootloader.boot()
 }
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    log::error!("[PANIC]: {}", info);
+    error!("[PANIC]: {}", info);
     libx64::diverging_hlt()
 }
 

@@ -72,7 +72,7 @@ for all possible configuration options.
 
 #[cfg(feature = "binary")]
 #[macro_use]
-extern crate log;
+extern crate tracing;
 
 pub use crate::boot_info::BootInfo;
 pub use crate::config::Config;
