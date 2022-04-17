@@ -26,6 +26,6 @@ serialuart16550 = {path = "../drivers/serialuart16550"}
 
 # ----- UTILS -----
 bitflags = {version="1", default-features=false}
-log = {version="0.4", default-features=false, features=["max_level_trace"]}
+tracing = {path = "../utils/tracing/tracing", default-features=false, features=[]}
 interrupt_list = {path = "../utils/interrupt_list", features=["libx64"]}
 qemu_logger = {path = "../utils/qemu_logger"}

@@ -11,7 +11,7 @@
 #![allow(clippy::cast_possible_truncation, clippy::missing_panics_doc)]
 
 #[macro_use]
-extern crate log;
+extern crate tracing;
 #[macro_use]
 extern crate qemu_logger;
 
@@ -31,6 +31,7 @@ pub mod mem;
 bootloader::entry_point!(kmain);
 pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
     qemu_logger::init().expect("unable to initialize logger");
+
     info!("kernel loaded");
 
     init::kinit();
@@ -44,8 +45,8 @@ pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
         PhysicalMemoryManager::init(&bi.memory_regions),
     );
 
-    dbg!(context.layout().usable.len());
 
+    dbg!(context.layout().usable.len());
     dbg!(context.mapper.try_translate(pmo).unwrap());
 
     let f = bi.framebuffer.as_mut().unwrap();
@@ -57,11 +58,11 @@ pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
         .expect("unable to map the global allocator");
 
     fb.draw(&vesa::text::Text::new(
-        alloc::string::String::from("Hello World!"),
+        "Hello World!",
         80,
         100,
     ))
-    .unwrap();
+      .unwrap();
 
     {
         /*
