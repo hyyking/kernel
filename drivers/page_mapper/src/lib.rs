@@ -69,6 +69,7 @@ impl PageMapper<Page4Kb> for OffsetMapper {
     }
 
     #[must_use]
+    // #[tracing::instrument(skip(self, allocator), target="konsole::page_map")]
     fn map<A>(
         &mut self,
         page: Page<Page4Kb>,
@@ -113,6 +114,8 @@ impl PageMapper<Page4Kb> for OffsetMapper {
         Ok(TlbFlush::new(page))
     }
 
+    #[must_use]
+    #[tracing::instrument(skip(self), target="konsole::page_update")]
     fn update_flags(
         &mut self,
         page: Page<Page4Kb>,
@@ -144,6 +147,8 @@ impl PageMapper<Page4Kb> for OffsetMapper {
         Ok(TlbFlush::new(page))
     }
 
+    #[must_use]
+    #[tracing::instrument(skip(self), target="konsole::page_unmap")]
     fn unmap(&mut self, page: Page<Page4Kb>) -> Result<TlbFlush<Page4Kb>, FrameError> {
         let addr = page.ptr();
 
@@ -182,6 +187,7 @@ impl PageMapper<Page2Mb> for OffsetMapper {
     }
 
     #[must_use]
+    // #[tracing::instrument(skip(self, allocator), target="konsole::page_map")]
     fn map<A>(
         &mut self,
         page: Page<Page2Mb>,
@@ -221,6 +227,8 @@ impl PageMapper<Page2Mb> for OffsetMapper {
         Ok(TlbFlush::new(page))
     }
 
+    #[must_use]
+    #[tracing::instrument(skip(self), target="konsole::page_update")]
     fn update_flags(
         &mut self,
         page: Page<Page2Mb>,
@@ -247,6 +255,8 @@ impl PageMapper<Page2Mb> for OffsetMapper {
         Ok(TlbFlush::new(page))
     }
 
+    #[must_use]
+    #[tracing::instrument(skip(self), target="konsole::page_unmap")]
     fn unmap(&mut self, page: Page<Page2Mb>) -> Result<TlbFlush<Page2Mb>, FrameError> {
         let addr = page.ptr();
 
@@ -280,6 +290,7 @@ impl PageMapper<Page1Gb> for OffsetMapper {
     }
 
     #[must_use]
+    #[tracing::instrument(skip(self, allocator), target="konsole::page_map")]
     fn map<A>(
         &mut self,
         page: Page<Page1Gb>,
@@ -311,6 +322,8 @@ impl PageMapper<Page1Gb> for OffsetMapper {
         Ok(TlbFlush::new(page))
     }
 
+    #[must_use]
+    #[tracing::instrument(skip(self), target="konsole::page_update")]
     fn update_flags(
         &mut self,
         page: Page<Page1Gb>,
@@ -331,6 +344,8 @@ impl PageMapper<Page1Gb> for OffsetMapper {
         Ok(TlbFlush::new(page))
     }
 
+    #[must_use]
+    #[tracing::instrument(skip(self), target="konsole::page_unmap")]
     fn unmap(&mut self, page: Page<Page1Gb>) -> Result<TlbFlush<Page1Gb>, FrameError> {
         let addr = page.ptr();
 

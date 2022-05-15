@@ -5,7 +5,6 @@
     slice_ptr_len,
     core_intrinsics,
     const_assume,
-    bool_to_option,
     array_chunks,
     step_trait
 )]

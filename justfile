@@ -7,7 +7,7 @@ SERIAL_ADDR := "127.0.0.1:8000"
 #cargo r --bin konsole &
 #sleep 0.5
 run: konsole image  
-    cargo run --bin konsole -- {{SERIAL_ADDR}} &
+    cargo run --release --bin konsole -- {{SERIAL_ADDR}} &
     sleep 0.5
     qemu-system-x86_64 {{QEMU_ARGS}} -serial tcp:{{SERIAL_ADDR}}
 #nc -l 8000 &

@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-kcore = { path="../../kcore" }
+kcore = { path="../../klib/kcore" }
 libx64 = { path="../../libx64" }
 bootloader = { path = "../../bootloader" }
 log = "0.4"

@@ -8,7 +8,7 @@ edition = "2021"
 alloc = ["kalloc", "crossbeam-queue/alloc", "futures-util/alloc"]
 
 [dependencies]
-libx64 = { path="../libx64" }
+libx64 = { path="../../libx64" }
 log = {version = "0.4"}
 kalloc = {path = "../kalloc", optional=true}
 crossbeam-queue = {version = "0.3", default-features=false }

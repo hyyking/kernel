@@ -23,6 +23,8 @@ macro_rules! dbg {
     }};
 }
 
+const BUFFER_SIZE: usize = 1024;
+
 klazy! {
     // SAFETY: we are the only one accessing this port on initialization
     ref static DRIVER: SpinMutex<RkyvLogger> = unsafe {
@@ -30,14 +32,14 @@ klazy! {
         port.init();
         SpinMutex::new(RkyvLogger {
             ser: PortSerializer { port, pos: 0 },
-            buffer: AlignedBytes([0; 512]),
-            scratch: AlignedBytes([0; 512])
+            buffer: AlignedBytes([0; BUFFER_SIZE]),
+            scratch: AlignedBytes([0; BUFFER_SIZE])
         })
     };
 }
 
 struct Logger;
-static mut LOGGER: Logger = Logger;
+static LOGGER: Logger = Logger;
 
 static SPANS: AtomicU64 = AtomicU64::new(1);
 static CURRENT_SPAN: AtomicU64 = AtomicU64::new(0);
@@ -51,7 +53,7 @@ pub static MAX_SCRATCH: core::sync::atomic::AtomicUsize = core::sync::atomic::At
 ///
 /// Forwards [`tracing::dispatch::set_global_default`] error
 pub fn init() -> Result<(), tracing_core::dispatch::SetGlobalDefaultError> {
-    tracing_core::dispatch::set_global_default(tracing_core::Dispatch::from_static(unsafe { &LOGGER }))?;
+    tracing_core::dispatch::set_global_default(tracing_core::Dispatch::from_static(&LOGGER))?;
     Ok(())
 }
 
@@ -62,8 +64,8 @@ struct PortSerializer {
 
 struct RkyvLogger {
     ser: PortSerializer,
-    buffer: AlignedBytes<512>,
-    scratch: AlignedBytes<512>,
+    buffer: AlignedBytes<BUFFER_SIZE>,
+    scratch: AlignedBytes<BUFFER_SIZE>,
 }
 
 impl rkyv::Fallible for PortSerializer {

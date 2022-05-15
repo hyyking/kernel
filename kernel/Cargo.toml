@@ -13,8 +13,8 @@ test=false
 bootloader = {path="../bootloader"}
 
 libx64 = {path = "../libx64"}
-kcore = {path = "../kcore", features=["alloc"]}
-kalloc = {path = "../kalloc"}
+kcore = {path = "../klib/kcore", features=["alloc"]}
+kalloc = {path = "../klib/kalloc"}
 
 # ----- DRIVERS -----
 page_mapper = {path = "../drivers/page_mapper"}
