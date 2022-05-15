@@ -3,7 +3,18 @@
 #[cfg(test)]
 extern crate std;
 
-use core::ops::DerefMut;
+pub struct CobsCodec;
+
+impl kio::codec::Encoder<&[u8]> for CobsCodec {
+    type Error = kio::Error;
+
+    fn encode<T>(&mut self, item: &[u8], mut dst: T) -> Result<usize, Self::Error>
+    where
+        T: AsMut<[u8]>,
+    {
+        encode(item, dst.as_mut()).map_err(|_| kio::Error {})
+    }
+}
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 struct EncoderState {
@@ -26,7 +37,7 @@ impl EncoderState {
 
 struct FramedEncoder<T>
 where
-    T: DerefMut<Target = [u8]>,
+    T: AsMut<[u8]>,
 {
     state: EncoderState,
     buffer: T,
@@ -34,13 +45,18 @@ where
 
 impl<T> FramedEncoder<T>
 where
-    T: DerefMut<Target = [u8]>,
+    T: AsMut<[u8]>,
 {
-    fn encode_byte(self, byte: u8) -> Self {
+    fn encode_byte(self, byte: u8) -> Result<Self, ()> {
         let Self {
             mut state,
-            mut buffer,
+            buffer: mut buf,
         } = self;
+        let buffer = buf.as_mut();
+
+        if state.cursor_buffer >= buffer.len() {
+            return Err(());
+        }
 
         if byte != 0 {
             buffer[state.cursor_buffer] = byte;
@@ -55,18 +71,18 @@ where
         }
 
         state.n += 1;
-        Self { state, buffer }
+        Ok(Self { state, buffer: buf })
     }
 
     fn finish(mut self) -> (usize, T) {
-        self.buffer[self.state.cursor_code] = self.state.code;
+        self.buffer.as_mut()[self.state.cursor_code] = self.state.code;
         (self.state.n, self.buffer)
     }
 }
 
 impl<T> From<T> for FramedEncoder<T>
 where
-    T: DerefMut<Target = [u8]>,
+    T: AsMut<[u8]>,
 {
     #[inline]
     fn from(buffer: T) -> Self {
@@ -78,13 +94,13 @@ where
 }
 
 /// Encodes without the terminator
-pub fn encode(input: &[u8], buffer: &mut [u8]) -> usize {
-    input
+pub fn encode(input: &[u8], buffer: &mut [u8]) -> Result<usize, ()> {
+    Ok(input
         .iter()
         .copied()
-        .fold(FramedEncoder::from(buffer), FramedEncoder::encode_byte)
+        .try_fold(FramedEncoder::from(buffer), FramedEncoder::encode_byte)?
         .finish()
-        .0
+        .0)
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -108,7 +124,7 @@ impl DecoderState {
 
 struct FramedDecoder<T>
 where
-    T: DerefMut<Target = [u8]>,
+    T: AsMut<[u8]>,
 {
     state: DecoderState,
     buffer: T,
@@ -116,7 +132,7 @@ where
 
 impl<T> FramedDecoder<T>
 where
-    T: DerefMut<Target = [u8]>,
+    T: AsMut<[u8]>,
 {
     fn decode_byte(self, byte: u8) -> Self {
         let Self {
@@ -125,14 +141,14 @@ where
         } = self;
         if state.block == 0 {
             if state.code != 0xFF {
-                buffer[state.cursor_buffer] = 0;
+                buffer.as_mut()[state.cursor_buffer] = 0;
                 state.cursor_buffer += 1;
                 state.n += 1;
             }
             state.code = byte;
             state.block = byte;
         } else {
-            buffer[state.cursor_buffer] = byte;
+            buffer.as_mut()[state.cursor_buffer] = byte;
             state.cursor_buffer += 1;
             state.n += 1;
         }
@@ -147,7 +163,7 @@ where
 
 impl<T> From<T> for FramedDecoder<T>
 where
-    T: DerefMut<Target = [u8]>,
+    T: AsMut<[u8]>,
 {
     #[inline]
     fn from(buffer: T) -> Self {
@@ -255,7 +271,7 @@ mod tests {
         fn empty_no_zero() {
             let mut buffer = [0u8; 256];
 
-            let n = encode(&[2; 32][..], &mut buffer);
+            let n = encode(&[2; 32][..], &mut buffer).unwrap();
             assert_eq!(n, 33); // + one delimiter
             assert_eq!(buffer[0], 33);
             assert_eq!(&buffer[1..n], &[2; 32][..]);
@@ -265,11 +281,11 @@ mod tests {
         fn full_zero() {
             let mut buffer = [0u8; 1024];
 
-            let n = encode(&[00; 256][..], &mut buffer);
+            let n = encode(&[00; 256][..], &mut buffer).unwrap();
             assert_eq!(n, 257); // + one delimiter
             assert_eq!(&buffer[..n], &[1; 512][..n]);
 
-            let n = encode(&[00; 512][..], &mut buffer);
+            let n = encode(&[00; 512][..], &mut buffer).unwrap();
             assert_eq!(n, 513); // + one delimiter
             assert_eq!(&buffer[..n], &[1; 1024][..n]);
         }
@@ -277,7 +293,7 @@ mod tests {
         #[test]
         fn full_nonzero() {
             let mut buffer = [0u8; 1024];
-            let n = encode(&[1; 512][..], &mut buffer);
+            let n = encode(&[1; 512][..], &mut buffer).unwrap();
 
             // 512/255 = 2, 512 % 255 = 2
             // so we have two full blocks + one trailing + 2 bytes of trailing data

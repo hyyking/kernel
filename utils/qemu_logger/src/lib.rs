@@ -1,9 +1,16 @@
 #![no_std]
 
-use core::{sync::atomic::{AtomicU64, Ordering}, fmt::Write};
+use core::{
+    fmt::Write,
+    sync::atomic::{AtomicU64, Ordering},
+};
 
-use kcore::{klazy, sync::SpinMutex, io::Cursor};
-use protocols::log::{Level, LogHeader, Message, Span, LogPacket, SIZE_PAD};
+use kcore::{klazy, sync::SpinMutex};
+use kio::codec::{ChainedCodec, FramedWrite, Sink};
+use kio::cursor::Cursor;
+
+use mais::CobsCodec;
+use protocols::log::{Level, LogPacket, Message, Span};
 use serialuart16550::SerialPort;
 
 use rkyv::{
@@ -13,7 +20,10 @@ use rkyv::{
     },
     AlignedBytes,
 };
-use tracing_core::{Metadata, span::{Attributes, Id, Record, Current}, Event};
+use tracing_core::{
+    span::{Attributes, Current, Id, Record},
+    Event, Metadata,
+};
 
 #[macro_export]
 macro_rules! dbg {
@@ -27,14 +37,12 @@ const BUFFER_SIZE: usize = 1024;
 
 klazy! {
     // SAFETY: we are the only one accessing this port on initialization
-    ref static DRIVER: SpinMutex<RkyvLogger> = unsafe {
+    ref static DRIVER: SpinMutex<FramedWrite<[u8; BUFFER_SIZE], SerialPort, ChainedCodec<[u8; BUFFER_SIZE], LogEncoder,CobsCodec>>> = unsafe {
         let mut port = SerialPort::new(0x3f8);
         port.init();
-        SpinMutex::new(RkyvLogger {
-            ser: PortSerializer { port, pos: 0 },
-            buffer: AlignedBytes([0; BUFFER_SIZE]),
-            scratch: AlignedBytes([0; BUFFER_SIZE])
-        })
+        SpinMutex::new(
+            FramedWrite::new([0; BUFFER_SIZE], port, ChainedCodec::new([0; BUFFER_SIZE], LogEncoder::new(), CobsCodec))
+        )
     };
 }
 
@@ -47,8 +55,6 @@ static CURRENT_SPAN: AtomicU64 = AtomicU64::new(0);
 // TODO: this probably doesn't work very well and should be a stack of metadata which is poped on span exit
 static mut CURRENT_METADATA: *const Metadata = core::ptr::null();
 
-pub static MAX_SCRATCH: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
-
 /// # Errors
 ///
 /// Forwards [`tracing::dispatch::set_global_default`] error
@@ -57,54 +63,51 @@ pub fn init() -> Result<(), tracing_core::dispatch::SetGlobalDefaultError> {
     Ok(())
 }
 
-struct PortSerializer {
-    port: SerialPort,
-    pos: usize,
+pub struct LogEncoder {
+    scratch_buffer: AlignedBytes<BUFFER_SIZE>,
 }
 
-struct RkyvLogger {
-    ser: PortSerializer,
-    buffer: AlignedBytes<BUFFER_SIZE>,
-    scratch: AlignedBytes<BUFFER_SIZE>,
-}
-
-impl rkyv::Fallible for PortSerializer {
-    type Error = ();
-}
-
-impl Serializer for PortSerializer {
-    fn pos(&self) -> usize {
-        self.pos
+impl LogEncoder {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            scratch_buffer: AlignedBytes([0u8; BUFFER_SIZE]),
+        }
     }
+}
 
-    fn write(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
-        bytes.iter().copied().for_each(|b| self.port.send(b));
-        self.pos += bytes.len();
-        Ok(())
+pub static MAX_SCRATCH: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+impl kio::codec::Encoder<LogPacket<'_>> for LogEncoder {
+    type Error = kio::Error;
+
+    fn encode<T>(&mut self, item: LogPacket<'_>, dst: T) -> Result<usize, Self::Error>
+    where
+        T: AsMut<[u8]>,
+    {
+        let mut buffer = CompositeSerializer::new(
+            BufferSerializer::new(dst),
+            ScratchTracker::new(BufferScratch::new(&mut self.scratch_buffer[..])),
+            rkyv::Infallible,
+        );
+
+        let n = buffer
+            .serialize_unsized_value(&item)
+            .map_err(|_| kio::Error {})?;
+
+        let (_, scratch, _) = buffer.into_components();
+
+        MAX_SCRATCH.store(
+            scratch.max_bytes_allocated(),
+            core::sync::atomic::Ordering::Relaxed,
+        );
+
+        Ok(n)
     }
 }
 
 fn _qprint_encode(message: LogPacket<'_>) {
-    let mut lock = DRIVER.lock();
-    let logger = &mut *lock;
-
-    let mut buffer = CompositeSerializer::new(
-        BufferSerializer::new(&mut logger.buffer[..]),
-        ScratchTracker::new(BufferScratch::new(&mut logger.scratch[..])),
-        rkyv::Infallible,
-    );
-
-    let n = buffer.serialize_unsized_value(&message).unwrap() + SIZE_PAD;
-
-    let (buffer, scratch, _) = buffer.into_components();
-
-    logger.ser.serialize_value(&LogHeader { size: n }).unwrap();
-    logger.ser.write(&buffer.into_inner()[..n]).unwrap();
-
-    MAX_SCRATCH.store(
-        scratch.max_bytes_allocated(),
-        core::sync::atomic::Ordering::Relaxed,
-    );
+    DRIVER.lock().send(message).unwrap();
 }
 
 struct DebugArgs<'a>(Cursor<'a>);
@@ -117,12 +120,16 @@ impl<'a> From<Cursor<'a>> for DebugArgs<'a> {
 
 impl tracing_core::field::Visit for DebugArgs<'_> {
     fn record_debug(&mut self, field: &tracing_core::Field, value: &dyn core::fmt::Debug) {
-        self.0.write_fmt(format_args!("{} = {:?}", field.name(), value)).unwrap();
+        self.0
+            .write_fmt(format_args!("{} = {:?}", field.name(), value))
+            .unwrap();
     }
 }
 
 impl tracing_core::Collect for Logger {
-    fn enabled(&self, _metadata: &Metadata) -> bool { true }
+    fn enabled(&self, _metadata: &Metadata) -> bool {
+        true
+    }
 
     fn new_span(&self, attr: &Attributes<'_>) -> Id {
         // NOTE: this is note thread safe, metadata is allways static so the pointer is valid
@@ -131,7 +138,10 @@ impl tracing_core::Collect for Logger {
         }
         let id = Id::from_u64(SPANS.fetch_add(1, Ordering::Relaxed));
 
-        let span = Span { id: id.into_u64(), target: attr.metadata().target() };
+        let span = Span {
+            id: id.into_u64(),
+            target: attr.metadata().target(),
+        };
 
         libx64::without_interrupts(|| _qprint_encode(LogPacket::NewSpan(span)));
         id
@@ -176,7 +186,10 @@ impl tracing_core::Collect for Logger {
 
     fn current_span(&self) -> Current {
         unsafe {
-            Current::new(Id::from_u64(CURRENT_SPAN.load(Ordering::Relaxed)), &*CURRENT_METADATA)
+            Current::new(
+                Id::from_u64(CURRENT_SPAN.load(Ordering::Relaxed)),
+                &*CURRENT_METADATA,
+            )
         }
     }
 }
