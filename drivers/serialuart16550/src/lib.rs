@@ -130,13 +130,16 @@ impl kio::write::Write for SerialPort {
         buffer.iter().copied().for_each(|b| self.send(b));
         Ok(buffer.len())
     }
+
+    fn write_all(&mut self, buffer: &[u8]) -> kio::Result<()> {
+        buffer.iter().copied().for_each(|b| self.send(b));
+        Ok(())
+    }
 }
 
 impl core::fmt::Write for SerialPort {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        for byte in s.bytes() {
-            self.send(byte);
-        }
+        s.bytes().into_iter().for_each(|b| self.send(b));
         Ok(())
     }
 }
