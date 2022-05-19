@@ -19,10 +19,10 @@ pub struct PageTable<LEVEL: PageLevel> {
 
 impl<LEVEL: PageLevel> core::fmt::Debug for PageTable<LEVEL> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "PageTable<Level{}>:\n", LEVEL::VALUE)?;
+        writeln!(f, "PageTable<Level{}>:", LEVEL::VALUE)?;
         for (i, entry) in self.entries.iter().enumerate() {
             if entry.is_present() {
-                write!(f, "{}: {:#?}\n", i, entry)?;
+                writeln!(f, "{}: {:#?}", i, entry)?;
             }
         }
         Ok(())
@@ -51,6 +51,8 @@ impl<LEVEL: PageLevel> PageTable<LEVEL> {
         unsafe { self.map_unchecked_mut(|page| page[idx].assume_init_mut()) }
     }
 
+    /// # Safety
+    /// This clears the entire table so you must assure that no entry is currently in use
     pub unsafe fn clear(mut self: Pin<&mut Self>) {
         for i in 0..512 {
             self.as_mut()
@@ -60,6 +62,7 @@ impl<LEVEL: PageLevel> PageTable<LEVEL> {
     }
 
     /// Get a reference to the page table's entries.
+    #[must_use]
     pub fn entries(&self) -> &[PageEntry<LEVEL>; 512] {
         &self.entries
     }
@@ -71,6 +74,7 @@ impl PageTable<Level4> {
         unsafe { translator.translate_frame(cr.frame()) }
     }
 
+    #[must_use]
     pub const fn new_zero() -> Self {
         const ZERO: PageEntry<Level4> = PageEntry::zero();
         Self {
@@ -217,6 +221,7 @@ impl<T> PageTableIndex<T> {
     }
 
     /// Get the page table index's idx.
+    #[must_use]
     pub fn value(&self) -> usize {
         self.idx
     }
@@ -235,13 +240,13 @@ impl<LEVEL: PageLevel> core::ops::Index<PageTableIndex<LEVEL>> for PageTable<LEV
     type Output = core::mem::MaybeUninit<PageEntry<LEVEL>>;
 
     fn index(&self, idx: PageTableIndex<LEVEL>) -> &Self::Output {
-        unsafe { &*(&self.entries[idx.idx] as *const PageEntry<LEVEL>).cast() }
+        unsafe { &*(core::ptr::addr_of!(self.entries[idx.idx]).cast()) }
     }
 }
 
 impl<LEVEL: PageLevel> core::ops::IndexMut<PageTableIndex<LEVEL>> for PageTable<LEVEL> {
     fn index_mut(&mut self, idx: PageTableIndex<LEVEL>) -> &mut Self::Output {
-        unsafe { &mut *(&mut self.entries[idx.idx] as *mut PageEntry<LEVEL>).cast() }
+        unsafe { &mut *(core::ptr::addr_of_mut!(self.entries[idx.idx]).cast()) }
     }
 }
 

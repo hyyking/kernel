@@ -4,10 +4,7 @@ use std::{cell::RefCell, collections::HashMap, io, rc::Rc};
 
 use protocols::log::{ArchivedLevel, ArchivedLogPacket, Level};
 
-use tokio::{
-    io::{AsyncWriteExt},
-    net::TcpListener,
-};
+use tokio::{io::AsyncWriteExt, net::TcpListener};
 
 use tokio_util::codec::Decoder;
 
@@ -42,10 +39,9 @@ impl Span {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> io::Result<()> {
     let mut addr = std::env::args().skip(1);
-    let addr = addr.next().ok_or(io::Error::new(
-        io::ErrorKind::Other,
-        "missing server address",
-    ))?;
+    let addr = addr
+        .next()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "missing server address"))?;
 
     let listener = TcpListener::bind(addr).await?;
 
@@ -154,11 +150,11 @@ async fn main() -> io::Result<()> {
         for _ in 0..span_stack.len() {
             stdout.write_all(b" ").await?;
         }
-        if span_stack.len() >= 1 {
+        if !span_stack.is_empty() {
             stdout.write_all("↳".as_bytes()).await?;
         }
         stdout.write_all(fmt_log.as_bytes()).await?;
-        stdout.write_all(b"\n").await?;
+        let _ = stdout.write(b"\n").await?;
     }
 
     Ok(())

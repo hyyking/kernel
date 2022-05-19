@@ -1,3 +1,4 @@
+#![allow(clippy::module_name_repetitions)]
 use rkyv::with::RefAsBox;
 
 #[derive(
@@ -46,7 +47,7 @@ pub struct Span<'a> {
 // #[cfg_attr(test, archive_attr(derive(bytecheck::CheckBytes)))]
 pub struct Message<'a> {
     pub level: Level,
-    pub line: u32,
+    pub line: usize,
 
     #[with(RefAsBox)]
     pub path: &'a str,

@@ -1,5 +1,5 @@
 /*!
-An experimental x86_64 bootloader that works on both BIOS and UEFI systems.
+An experimental `x86_64` bootloader that works on both BIOS and UEFI systems.
 
 To use this crate, specify it as a dependency in the `Cargo.toml` of your operating system
 kernel. Then you can use the [`entry_point`] macro to mark your entry point function. This

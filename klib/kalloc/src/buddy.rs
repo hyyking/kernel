@@ -23,13 +23,28 @@ const fn buddy_of(range: Range<usize>) -> Range<usize> {
     }
 }
 
-#[derive(Clone, Eq, PartialEq)]
+const fn buckets_size_mask(size: MaskInt) -> MaskInt {
+    // SAFETY: it should be the case, and is checked in debug mode
+    unsafe { core::intrinsics::assume(size.is_power_of_two()) };
+
+    let mut i: MaskInt = 0;
+    let mut mask: MaskInt = 0;
+    while i < MaskInt::BITS as MaskInt {
+        mask |= 1 << i;
+        i += size;
+    }
+    mask
+}
+
+#[derive(Copy, Clone, Eq, PartialEq)]
 #[repr(transparent)]
 pub struct Bucket<const MIN: usize, T>(T);
 
 const BIN_ALLOCATED: AllocatorBinFlags = AllocatorBinFlags::USR_BIT1;
 
 impl<const MIN: usize> Bucket<MIN, AllocatorBin> {
+    #[inline]
+    #[must_use]
     const fn new(start: usize, end: usize) -> Self {
         Self(AllocatorBin {
             flags: AllocatorBinFlags::USED,
@@ -38,14 +53,20 @@ impl<const MIN: usize> Bucket<MIN, AllocatorBin> {
             data: 0,
         })
     }
+
+    #[inline]
+    #[must_use]
     pub const fn empty() -> Self {
         Self(AllocatorBin::with_flags(AllocatorBinFlags::USED))
     }
 
-    pub fn into_inner(self) -> AllocatorBin {
+    #[inline]
+    #[must_use]
+    pub const fn into_inner(self) -> AllocatorBin {
         self.0
     }
 
+    #[allow(clippy::cast_possible_truncation)]
     unsafe fn merge(self, rhs: Self) -> Self {
         let start = core::cmp::min(self.0.start.as_u64(), rhs.0.start.as_u64()) as usize;
         let end = core::cmp::max(self.0.end.as_u64(), rhs.0.end.as_u64()) as usize;
@@ -81,9 +102,12 @@ where
         self.0.borrow().flags.contains(BIN_ALLOCATED)
     }
 
+    #[allow(clippy::cast_possible_truncation)]
     fn start(&self) -> usize {
         self.0.borrow().start.as_u64() as usize
     }
+
+    #[allow(clippy::cast_possible_truncation)]
     fn end(&self) -> usize {
         self.0.borrow().end.as_u64() as usize
     }
@@ -101,7 +125,7 @@ where
     }
 
     fn to_owned(&self) -> Bucket<MIN, AllocatorBin> {
-        Bucket::from(self.0.borrow().clone())
+        Bucket::from(*self.0.borrow())
     }
 }
 
@@ -118,14 +142,14 @@ impl<const MIN: usize> Bucket<MIN, &mut AllocatorBin> {
         if Bucket::<MIN, _>::from(&*self.0).is_empty() {
             None
         } else {
-            let ret = self.0.clone();
+            let ret = *self.0;
             *self.0 = Bucket::<MIN, AllocatorBin>::empty().into_inner();
             Some(Bucket::from(ret))
         }
     }
 }
 
-impl<'a, const MIN: usize> From<AllocatorBin> for Bucket<MIN, AllocatorBin> {
+impl<const MIN: usize> From<AllocatorBin> for Bucket<MIN, AllocatorBin> {
     fn from(bin: AllocatorBin) -> Self {
         Self(bin)
     }
@@ -196,10 +220,10 @@ impl<'a, const MIN: usize> BinSlice<'a, MIN> {
 
     fn get_deallocated_mut(&mut self, index: usize) -> Option<Bucket<MIN, &mut AllocatorBin>> {
         let bin = Bucket::from(self.bins.get_mut(index)?);
-        if !bin.is_allocated() {
-            Some(bin)
-        } else {
+        if bin.is_allocated() {
             None
+        } else {
+            Some(bin)
         }
     }
 
@@ -237,6 +261,9 @@ pub enum Error {
 }
 
 impl<'a, const MIN: usize> BuddyAllocator<'a, MIN> {
+    /// # Errors
+    ///
+    /// See [`Error`](Error) for detail
     pub fn new(bins: &'a mut [AllocatorBin], page: FrameRange<Page4Kb>) -> Result<Self, Error> {
         if !MIN.is_power_of_two() {
             return Err(Error::InvalidPowerOfTwo);
@@ -253,9 +280,10 @@ impl<'a, const MIN: usize> BuddyAllocator<'a, MIN> {
 
         let start = page.start();
 
-        bins.iter_mut().for_each(|bin| {
+        for bin in bins.iter_mut() {
             bin.flags.insert(AllocatorBinFlags::USED);
-        });
+        }
+
         let mut this = Self {
             bins: BinSlice { bins },
             used_mask: 0,
@@ -270,42 +298,39 @@ impl<'a, const MIN: usize> BuddyAllocator<'a, MIN> {
         Ok(this)
     }
 
+    #[inline]
+    #[must_use]
     pub fn contains(&self, ptr: *const u8) -> bool {
+        #[allow(clippy::cast_possible_truncation)]
         ((self.start.as_u64() as usize)..(self.start.as_u64() as usize + DEPTH * MIN))
             .contains(&(ptr as usize))
     }
 
-    pub const fn pages(&self) -> usize {
+    #[inline]
+    #[must_use]
+    pub const fn pages() -> usize {
         DEPTH * MIN / (Page4Kb as usize)
     }
 
+    #[inline]
+    #[must_use]
     pub const fn len(&self) -> usize {
         self.used_mask.count_ones() as usize
     }
 
+    #[inline]
+    #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
+    #[must_use]
     pub fn have_buckets_for(&self, size: usize) -> bool {
         debug_assert!(size.is_power_of_two());
 
-        const fn buckets_size_mask(size: MaskInt) -> MaskInt {
-            // SAFETY: it should be the case, and is checked in debug mode
-            unsafe { core::intrinsics::assume(size.is_power_of_two()) };
-
-            let mut i: MaskInt = 0;
-            let mut mask: MaskInt = 0;
-            while i < MaskInt::BITS as MaskInt {
-                mask |= 1 << i;
-                i += size;
-            }
-            mask
-        }
-
         let level = size as MaskInt / MIN as MaskInt;
-        let ones = MaskInt::BITS as MaskInt / level;
-        !((self.used_mask & buckets_size_mask(level)).count_ones() == ones as u32)
+        let ones = MaskInt::from(MaskInt::BITS) / level;
+        u64::from((self.used_mask & buckets_size_mask(level)).count_ones()) != ones
     }
 
     const fn is_used(&self, idx: usize) -> bool {
@@ -325,21 +350,21 @@ impl<'a, const MIN: usize> BuddyAllocator<'a, MIN> {
         let used = self.is_used(idx);
         let bin = self.bins.get_mut(idx).and_then(|mut bin| {
             if used || bin.size() <= MIN {
-                return None;
+                None
             } else {
                 bin.take_owned()
             }
         })?;
 
         let (left, right) = bin.split();
-        let (lstart, rstart) = (left.start(), right.start());
+        let (left_start, right_start) = (left.start(), right.start());
 
         // SAFETY: TODO
         unsafe {
-            self.bins.set_unchecked(lstart, left);
-            self.bins.set_unchecked(rstart, right);
+            self.bins.set_unchecked(left_start, left);
+            self.bins.set_unchecked(right_start, right);
         }
-        Some((lstart, rstart))
+        Some((left_start, right_start))
     }
 
     const unsafe fn addr_for(&self, range: Range<usize>) -> *mut u8 {
@@ -348,6 +373,7 @@ impl<'a, const MIN: usize> BuddyAllocator<'a, MIN> {
     }
 
     fn bin_for(&self, ptr: NonNull<u8>) -> Option<Bucket<MIN, &AllocatorBin>> {
+        #[allow(clippy::cast_possible_truncation)]
         let idx = (ptr.as_ptr() as u64 - self.start.as_u64()) as usize / MIN;
         self.bins.get(idx)
     }
@@ -393,7 +419,7 @@ impl<'a, const MIN: usize> BuddyAllocator<'a, MIN> {
 
     fn deallocate_merge(
         &mut self,
-        bin: Bucket<MIN, AllocatorBin>,
+        bin: &Bucket<MIN, AllocatorBin>,
     ) -> Option<Bucket<MIN, AllocatorBin>> {
         let range = bin.range();
         let mut index = range.start;
@@ -406,14 +432,12 @@ impl<'a, const MIN: usize> BuddyAllocator<'a, MIN> {
                 .bins
                 .get_mut(index)
                 .as_mut()
-                .map(Bucket::take_owned)
-                .flatten()?;
+                .and_then(Bucket::take_owned)?;
 
             let buddy = match self
                 .buddy_of_bucket(&bin)
                 .as_mut()
-                .map(Bucket::take_owned)
-                .flatten()
+                .and_then(Bucket::take_owned)
             {
                 Some(buddy) => buddy,
                 None => {
@@ -440,22 +464,19 @@ unsafe impl<const MIN: usize> AllocatorMutImpl for BuddyAllocator<'_, MIN> {
             return Err(AllocError);
         }
 
-        let free_index = self.bins.iter_available(layout).next();
-        if let Some(i) = free_index {
-            let mut bin = self.bins.get(i).ok_or(AllocError)?.to_owned();
-            bin = self.allocate_split(bin, layout)?;
+        let i = self.bins.iter_available(layout).next().ok_or(AllocError)?;
 
-            let range = bin.range();
-            let size = bin.size_bytes();
+        let mut bin = self.bins.get(i).ok_or(AllocError)?.to_owned();
+        bin = self.allocate_split(bin, layout)?;
 
-            self.mark_used(i);
+        let range = bin.range();
+        let size = bin.size_bytes();
 
-            return Ok(unsafe {
-                NonNull::new_unchecked(core::slice::from_raw_parts_mut(self.addr_for(range), size))
-            });
-        } else {
-            Err(AllocError)
-        }
+        self.mark_used(i);
+
+        Ok(unsafe {
+            NonNull::new_unchecked(core::slice::from_raw_parts_mut(self.addr_for(range), size))
+        })
     }
 
     unsafe fn deallocate_mut(&mut self, ptr: NonNull<u8>, layout: Layout) {
@@ -463,7 +484,7 @@ unsafe impl<const MIN: usize> AllocatorMutImpl for BuddyAllocator<'_, MIN> {
             Some(bin) if layout.size() <= bin.size() => bin.to_owned(),
             _ => panic!("pointer is at an invalid bin or doesn't belong to this allocator"),
         };
-        self.deallocate_merge(bin);
+        self.deallocate_merge(&bin);
     }
 
     unsafe fn grow_mut(
@@ -513,8 +534,7 @@ unsafe impl<const MIN: usize> AllocatorMutImpl for BuddyAllocator<'_, MIN> {
         let buddy = self
             .buddy_of_bucket(&bin)
             .as_mut()
-            .map(Bucket::take_owned)
-            .flatten();
+            .and_then(Bucket::take_owned);
         match buddy {
             Some(buddy) if buddy.is_right() && bin.size_bytes() * 2 >= new_layout.size() => {
                 let index = bin.start();

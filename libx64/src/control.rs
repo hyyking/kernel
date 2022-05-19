@@ -139,6 +139,8 @@ bitflags::bitflags! {
     }
 }
 
+#[inline]
+#[must_use]
 pub fn cr0() -> CR0 {
     let value: u64;
     unsafe {
@@ -147,6 +149,7 @@ pub fn cr0() -> CR0 {
     CR0::from_bits_truncate(value)
 }
 
+#[inline]
 pub fn set_cr0(cr0: CR0) {
     unsafe {
         asm!("mov cr0, {}", in(reg) cr0.bits(), options(nostack, preserves_flags));

@@ -36,11 +36,13 @@ impl OffsetMapper {
         }
     }
 
+    #[must_use]
     pub const fn offset(&self) -> VirtualAddr {
         self.offset
     }
 
-    pub fn translator(&self) -> &OffsetWalker<Page4Kb> {
+    #[must_use]
+    pub const fn translator(&self) -> &OffsetWalker<Page4Kb> {
         self.walker.translator()
     }
 
@@ -68,7 +70,6 @@ impl PageMapper<Page4Kb> for OffsetMapper {
         self.walker.level4()
     }
 
-    #[must_use]
     // #[tracing::instrument(skip(self, allocator), target="konsole::page_map")]
     fn map<A>(
         &mut self,
@@ -81,7 +82,7 @@ impl PageMapper<Page4Kb> for OffsetMapper {
         A: FrameAllocator<Page4Kb>,
     {
         let addr = page.ptr();
-        let pflags = Flags::PRESENT | Flags::RW | Flags::US;
+        let parent_flags = Flags::PRESENT | Flags::RW | Flags::US;
         trace!("Mapping page: {:?} -> {:?}", &page, &frame);
 
         let level_4 = self.walker.level4();
@@ -90,19 +91,19 @@ impl PageMapper<Page4Kb> for OffsetMapper {
         let level_3 = self
             .walker
             .walk_level3(entry)
-            .or_create(pflags, allocator)?;
+            .or_create(parent_flags, allocator)?;
 
         let entry = level_3.index_pin_mut(addr.page_table_index(Level3));
         let level_2 = self
             .walker
             .walk_level2(entry)
-            .or_create(pflags, allocator)?;
+            .or_create(parent_flags, allocator)?;
 
         let entry = level_2.index_pin_mut(addr.page_table_index(Level2));
         let level_1 = self
             .walker
             .walk_level1(entry)
-            .or_create(pflags, allocator)?;
+            .or_create(parent_flags, allocator)?;
 
         // SAFETY: we are the sole owner of this page and the entry will be valid
         unsafe {
@@ -114,8 +115,7 @@ impl PageMapper<Page4Kb> for OffsetMapper {
         Ok(TlbFlush::new(page))
     }
 
-    #[must_use]
-    #[tracing::instrument(skip(self), target="konsole::page_update")]
+    #[tracing::instrument(skip(self), target = "konsole::page_update")]
     fn update_flags(
         &mut self,
         page: Page<Page4Kb>,
@@ -147,8 +147,7 @@ impl PageMapper<Page4Kb> for OffsetMapper {
         Ok(TlbFlush::new(page))
     }
 
-    #[must_use]
-    #[tracing::instrument(skip(self), target="konsole::page_unmap")]
+    #[tracing::instrument(skip(self), target = "konsole::page_unmap")]
     fn unmap(&mut self, page: Page<Page4Kb>) -> Result<TlbFlush<Page4Kb>, FrameError> {
         let addr = page.ptr();
 
@@ -186,7 +185,6 @@ impl PageMapper<Page2Mb> for OffsetMapper {
         self.walker.level4()
     }
 
-    #[must_use]
     // #[tracing::instrument(skip(self, allocator), target="konsole::page_map")]
     fn map<A>(
         &mut self,
@@ -199,7 +197,7 @@ impl PageMapper<Page2Mb> for OffsetMapper {
         A: FrameAllocator<Page4Kb>,
     {
         let addr = page.ptr();
-        let pflags = Flags::PRESENT | Flags::RW | Flags::US;
+        let parent_flags = Flags::PRESENT | Flags::RW | Flags::US;
 
         trace!("Mapping page: {:?} -> {:?}", &page, &frame);
 
@@ -209,13 +207,13 @@ impl PageMapper<Page2Mb> for OffsetMapper {
         let level_3 = self
             .walker
             .walk_level3(entry)
-            .or_create(pflags, allocator)?;
+            .or_create(parent_flags, allocator)?;
 
         let entry = level_3.index_pin_mut(addr.page_table_index(Level3));
         let level_2 = self
             .walker
             .walk_level2(entry)
-            .or_create(pflags, allocator)?;
+            .or_create(parent_flags, allocator)?;
 
         // SAFETY: we are the sole owner of this page and the entry will be valid
         unsafe {
@@ -227,8 +225,7 @@ impl PageMapper<Page2Mb> for OffsetMapper {
         Ok(TlbFlush::new(page))
     }
 
-    #[must_use]
-    #[tracing::instrument(skip(self), target="konsole::page_update")]
+    #[tracing::instrument(skip(self), target = "konsole::page_update")]
     fn update_flags(
         &mut self,
         page: Page<Page2Mb>,
@@ -255,8 +252,7 @@ impl PageMapper<Page2Mb> for OffsetMapper {
         Ok(TlbFlush::new(page))
     }
 
-    #[must_use]
-    #[tracing::instrument(skip(self), target="konsole::page_unmap")]
+    #[tracing::instrument(skip(self), target = "konsole::page_unmap")]
     fn unmap(&mut self, page: Page<Page2Mb>) -> Result<TlbFlush<Page2Mb>, FrameError> {
         let addr = page.ptr();
 
@@ -289,8 +285,7 @@ impl PageMapper<Page1Gb> for OffsetMapper {
         self.walker.level4()
     }
 
-    #[must_use]
-    #[tracing::instrument(skip(self, allocator), target="konsole::page_map")]
+    #[tracing::instrument(skip(self, allocator), target = "konsole::page_map")]
     fn map<A>(
         &mut self,
         page: Page<Page1Gb>,
@@ -302,7 +297,7 @@ impl PageMapper<Page1Gb> for OffsetMapper {
         A: FrameAllocator<Page4Kb>,
     {
         let addr = page.ptr();
-        let pflags = Flags::PRESENT | Flags::RW | Flags::US;
+        let parent_flags = Flags::PRESENT | Flags::RW | Flags::US;
         trace!("Mapping page: {:?} -> {:?}", &page, &frame);
 
         let level_4 = self.walker.level4();
@@ -311,7 +306,7 @@ impl PageMapper<Page1Gb> for OffsetMapper {
         let level_3 = self
             .walker
             .walk_level3(entry)
-            .or_create(pflags, allocator)?;
+            .or_create(parent_flags, allocator)?;
 
         // SAFETY: we are the sole owner of this page and the entry will be valid
         unsafe {
@@ -322,8 +317,7 @@ impl PageMapper<Page1Gb> for OffsetMapper {
         Ok(TlbFlush::new(page))
     }
 
-    #[must_use]
-    #[tracing::instrument(skip(self), target="konsole::page_update")]
+    #[tracing::instrument(skip(self), target = "konsole::page_update")]
     fn update_flags(
         &mut self,
         page: Page<Page1Gb>,
@@ -344,8 +338,7 @@ impl PageMapper<Page1Gb> for OffsetMapper {
         Ok(TlbFlush::new(page))
     }
 
-    #[must_use]
-    #[tracing::instrument(skip(self), target="konsole::page_unmap")]
+    #[tracing::instrument(skip(self), target = "konsole::page_unmap")]
     fn unmap(&mut self, page: Page<Page1Gb>) -> Result<TlbFlush<Page1Gb>, FrameError> {
         let addr = page.ptr();
 

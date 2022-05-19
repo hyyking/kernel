@@ -95,7 +95,7 @@ where
     where
         F: Future<Output = ()> + 'static,
     {
-        self.tasks.push_back(Task::new(task, self.alloc.clone()))
+        self.tasks.push_back(Task::new(task, self.alloc.clone()));
     }
 
     pub fn run(&mut self) {

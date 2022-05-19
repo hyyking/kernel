@@ -9,6 +9,7 @@
     step_trait
 )]
 #![allow(unsafe_op_in_unsafe_fn, unused_unsafe)]
+#![allow(clippy::module_name_repetitions)]
 
 #[cfg(test)]
 #[macro_use]
@@ -16,7 +17,6 @@ extern crate std;
 
 extern crate alloc;
 
-pub mod btree;
 pub mod buddy;
 pub mod kalloc;
 pub mod shared;
@@ -51,6 +51,8 @@ pub struct AllocatorBin {
 }
 
 impl AllocatorBin {
+    #[inline]
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             flags: AllocatorBinFlags::empty(),
@@ -60,6 +62,8 @@ impl AllocatorBin {
         }
     }
 
+    #[inline]
+    #[must_use]
     pub const fn with_flags(flags: AllocatorBinFlags) -> Self {
         Self {
             flags,
@@ -69,22 +73,37 @@ impl AllocatorBin {
         }
     }
 
+    #[inline]
+    #[must_use]
     pub const fn range(&self) -> PageRange<Page4Kb> {
         PageRange::new_addr(self.start, self.end)
     }
 
+    #[inline]
+    #[must_use]
     pub const fn len(&self) -> usize {
         self.range().len()
     }
 
+    #[inline]
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// # Safety
+    /// The data pointer must be a pointer to a T
+    #[must_use]
     pub unsafe fn cast_data_ptr<T>(&self) -> Option<NonNull<T>> {
         NonNull::new(self.data as *mut T)
     }
 
+    #[must_use]
     pub fn data_ref(&self) -> &usize {
         &self.data
     }
 
+    #[must_use]
     pub fn data_ref_mut(&mut self) -> &mut usize {
         &mut self.data
     }

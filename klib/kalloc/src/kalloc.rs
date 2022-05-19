@@ -5,6 +5,9 @@ use alloc::alloc::{AllocError, Layout};
 /// Clone of [`Allocator`](alloc::alloc::Allocator) for allocators that need a mutable reference
 /// for implementation. This allows [`SpinMutex`](kcore::sync::mutex::SpinMutex) to implement the
 /// [`Allocator`](alloc::alloc::Allocator) trait.
+///
+/// # Safety
+/// This must allocate as if it was the only reference to the allocator, but must not assume it is
 pub unsafe trait AllocatorMutImpl {
     /// Attempts to allocate a block of memory.
     ///

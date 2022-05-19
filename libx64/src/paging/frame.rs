@@ -82,11 +82,14 @@ where
 
     #[inline]
     #[must_use]
+    /// # Panics
+    ///
+    /// Compile time panic if N is not `PageSize` (it is trait bound in this impl but the compiler can't list all alternatives for us)
     pub const fn alloc_layout() -> core::alloc::Layout {
         match N {
             super::Page4Kb => core::alloc::Layout::new::<[u8; 4 * crate::units::KB]>(),
             super::Page2Mb => core::alloc::Layout::new::<[u8; 2 * crate::units::MB]>(),
-            super::Page1Gb => core::alloc::Layout::new::<[u8; 1 * crate::units::GB]>(),
+            super::Page1Gb => core::alloc::Layout::new::<[u8; crate::units::GB]>(),
             _ => panic!("unsupported page size"),
         }
     }

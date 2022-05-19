@@ -167,7 +167,7 @@ impl tracing_core::Collect for Logger {
         let metadata = event.metadata();
         let log = Message {
             level: level_from_tracing(*metadata.level()),
-            line: metadata.line().unwrap_or(0),
+            line: metadata.line().unwrap_or(0) as usize,
             path: metadata.module_path().unwrap_or("notfound"),
             message,
         };

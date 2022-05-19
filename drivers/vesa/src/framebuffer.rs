@@ -12,6 +12,13 @@ pub struct Framebuffer {
     y_pos: usize,
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[repr(u8)]
+pub enum DrawError {
+    InvalidDrawBox,
+    InvalidPixelPos
+}
+
 impl Framebuffer {
     /// Creates a new logger that uses the given framebuffer.
     pub fn new(framebuffer: &'static mut [u8], info: FrameBufferInfo) -> Self {
@@ -25,13 +32,15 @@ impl Framebuffer {
         logger
     }
 
-    pub fn draw<I>(&mut self, obj: &dyn Drawable<Iter = I>) -> Result<(), ()>
+    /// # Errors
+    /// Fails if the object doesn't fit in the screen or the bounding box
+    pub fn draw<I>(&mut self, obj: &dyn Drawable<Iter = I>) -> Result<(), DrawError>
     where
         I: Iterator<Item = Pixel>,
     {
         let (x_t, y_t, x_b, y_b) = obj.draw_box();
         if x_b >= self.info.horizontal_resolution && y_b >= self.info.vertical_resolution {
-            return Err(());
+            return Err(DrawError::InvalidDrawBox);
         }
 
         let pad = obj.padding();
@@ -40,9 +49,10 @@ impl Framebuffer {
 
         obj.points().try_for_each(|Pixel { x, y, intensity }| {
             if x >= x_t && y >= y_t && x <= x_b && y <= y_b {
-                Ok(self.write_pixel(x, y, intensity))
+                self.write_pixel(x, y, intensity);
+                Ok(())
             } else {
-                Err(())
+                Err(DrawError::InvalidPixelPos)
             }
         })
     }
@@ -54,11 +64,15 @@ impl Framebuffer {
         self.framebuffer.fill(0);
     }
 
-    pub fn width(&self) -> usize {
+    #[inline]
+    #[must_use]
+    pub const fn width(&self) -> usize {
         self.info.horizontal_resolution
     }
 
-    pub fn height(&self) -> usize {
+    #[inline]
+    #[must_use]
+    pub const fn height(&self) -> usize {
         self.info.vertical_resolution
     }
     /*

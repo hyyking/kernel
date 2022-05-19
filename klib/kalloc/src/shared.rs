@@ -35,7 +35,7 @@ where
     }
 
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-        <A as Allocator>::deallocate(&*self.inner, ptr, layout)
+        <A as Allocator>::deallocate(&*self.inner, ptr, layout);
     }
 
     fn allocate_zeroed(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {

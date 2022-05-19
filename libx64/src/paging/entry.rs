@@ -160,6 +160,8 @@ impl<L: PageLevel> core::fmt::Debug for PageEntry<L> {
 }
 
 impl<L> PageEntry<L> {
+    #[must_use]
+    #[inline]
     pub const fn zero() -> Self {
         Self {
             raw: RawPageEntry::zero(),

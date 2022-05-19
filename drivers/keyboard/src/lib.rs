@@ -16,19 +16,23 @@ pub struct Keyboard {
 }
 
 impl Keyboard {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             waker: AtomicWaker::new(),
         }
     }
 
-    pub unsafe fn add_value(&self, value: u8) {
+    #[inline]
+    pub fn add_value(&self, value: u8) {
         QUEUE.push(value).expect("queue is full");
         self.waker.wake();
     }
 
-    pub unsafe fn read_value() -> u8 {
-        QUEUE.pop().expect("queue is full")
+    #[inline]
+    #[must_use]
+    pub fn read_value() -> Option<u8> {
+        QUEUE.pop()
     }
 }
 

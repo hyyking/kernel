@@ -102,7 +102,7 @@ impl<'a, T: ?Sized> DerefMut for SpinMutexGuard<'a, T> {
 }
 
 #[cfg(feature = "alloc")]
-unsafe impl<A: 'static> alloc::alloc::Allocator for SpinMutex<A>
+unsafe impl<A> alloc::alloc::Allocator for SpinMutex<A>
 where
     A: kalloc::kalloc::AllocatorMutImpl + 'static,
 {
@@ -121,7 +121,7 @@ where
     }
 
     unsafe fn deallocate(&self, ptr: core::ptr::NonNull<u8>, layout: core::alloc::Layout) {
-        self.lock().deallocate_mut(ptr, layout)
+        self.lock().deallocate_mut(ptr, layout);
     }
 
     unsafe fn grow(

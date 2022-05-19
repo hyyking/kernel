@@ -19,6 +19,8 @@ unsafe impl Sync for SlabPage {}
 impl SlabPage {
     const SLOT_BYTES: usize = (N as usize) / 8;
 
+    #[inline]
+    #[must_use]
     pub const fn from_page(page: Page<Page4Kb>) -> Self {
         Self {
             base: unsafe { NonNull::new_unchecked(page.ptr().as_u64() as *mut u8) },
@@ -27,11 +29,21 @@ impl SlabPage {
         }
     }
 
+    #[inline]
+    #[must_use]
     pub const fn len(&self) -> usize {
         self.len as usize
     }
 
-    pub const fn capacity(&self) -> usize {
+    #[inline]
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn capacity() -> usize {
         Page4Kb as usize / N
     }
 
@@ -41,10 +53,10 @@ impl SlabPage {
         }
 
         let result = if self.len() % 2 == 0 {
-            let mut range = 0..(self.capacity() / 2 + 1);
+            let mut range = 0..=(Self::capacity() / 2);
             range.find_map(|i| self.try_alloc_at(i))
         } else {
-            let range = (self.capacity() / 2 + 1)..self.capacity();
+            let range = (Self::capacity() / 2 + 1)..Self::capacity();
             range.rev().find_map(|i| self.try_alloc_at(i))
         };
 
@@ -74,6 +86,7 @@ impl SlabPage {
         let ptr = ptr.as_ptr() as u64;
         let this = self.base.as_ptr() as u64;
 
+        #[allow(clippy::cast_possible_truncation)]
         let offset = (ptr - this) as usize / Self::SLOT_BYTES;
         let mask = 1 << offset;
 
@@ -90,7 +103,7 @@ impl core::fmt::Debug for SlabPage {
             .field("base", &format_args!("{:#x}", self.base.as_ptr() as u64))
             .field("mask", &format_args!("{:#034b}", self.mask))
             .field("len", &self.len)
-            .field("cap", &self.capacity())
+            .field("cap", &Self::capacity())
             .finish()
     }
 }
@@ -111,6 +124,6 @@ unsafe impl AllocatorMutImpl for SlabPage {
 
         // FIXME: this is wrong on so many levels
         #[allow(unsafe_op_in_unsafe_fn, unused_unsafe)]
-        libx64::without_interrupts(|| SlabPage::deallocate(self, ptr, layout))
+        libx64::without_interrupts(|| SlabPage::deallocate(self, ptr, layout));
     }
 }

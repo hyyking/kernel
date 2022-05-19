@@ -9,6 +9,7 @@ use libx64::{
     },
 };
 
+#[allow(clippy::module_name_repetitions)]
 pub struct OffsetWalker<const N: usize>
 where
     PageCheck<N>: PageSize,

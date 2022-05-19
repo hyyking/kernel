@@ -84,7 +84,7 @@ impl Iterator for TextIter {
                 }
             }
 
-            let c = unsafe { self.text.as_ref().chars().skip(self.idx).next()? };
+            let c = unsafe { self.text.as_ref().chars().nth(self.idx + 1)? };
             let c = Character::new(c, self.at.0, self.at.1);
             self.at.0 += c.width();
             self.curr = Some(c.points());
