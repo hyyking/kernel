@@ -1,3 +1,0 @@
-[submodule "utils/tracing"]
-	path = utils/tracing
-	url = git@github.com:hyyking/tracing.git
