@@ -5,7 +5,7 @@ use std::{cell::RefCell, collections::HashMap, io, rc::Rc};
 use protocols::log::{ArchivedLevel, ArchivedLogPacket, Level};
 
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncWriteExt},
     net::TcpListener,
 };
 
@@ -144,7 +144,6 @@ async fn main() -> io::Result<()> {
                 )
             }
             ArchivedLevel::Trace => {
-                continue;
                 format!(
                     "\u{001b}[38;2;128;128;128;2m[TRACE][{}:{}] > {}\u{001b}[0m",
                     &*message.path, message.line, &*message.message
