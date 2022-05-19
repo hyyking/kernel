@@ -12,9 +12,9 @@ impl kio::codec::Encoder<&[u8]> for CobsCodec {
     where
         T: AsMut<[u8]>,
     {
-        let n = encode(item, dst.as_mut()).map_err(|_| kio::Error {})?;
+        let n = encode(item, dst.as_mut())?;
         dst.as_mut()[n] = 0;
-        Ok(n+1)
+        Ok(n + 1)
     }
 }
 
@@ -49,7 +49,7 @@ impl<T> FramedEncoder<T>
 where
     T: AsMut<[u8]>,
 {
-    fn encode_byte(self, byte: u8) -> Result<Self, ()> {
+    fn encode_byte(self, byte: u8) -> Result<Self, kio::Error> {
         let Self {
             mut state,
             buffer: mut buf,
@@ -57,7 +57,7 @@ where
         let buffer = buf.as_mut();
 
         if state.cursor_buffer >= buffer.len() {
-            return Err(());
+            return Err(kio::Error::new(kio::ErrorKind::StorageFull));
         }
 
         if byte != 0 {
@@ -96,7 +96,11 @@ where
 }
 
 /// Encodes without the terminator
-pub fn encode(input: &[u8], buffer: &mut [u8]) -> Result<usize, ()> {
+///
+/// # Errors
+///
+/// Errors if the buffer is not large enough
+pub fn encode(input: &[u8], buffer: &mut [u8]) -> Result<usize, kio::Error> {
     Ok(input
         .iter()
         .copied()

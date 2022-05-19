@@ -92,16 +92,6 @@ async fn main() -> io::Result<()> {
             }
         };
 
-        const fn archive_to_level(archive: ArchivedLevel) -> Level {
-            match archive {
-                ArchivedLevel::Error => Level::Error,
-                ArchivedLevel::Warn => Level::Warn,
-                ArchivedLevel::Info => Level::Info,
-                ArchivedLevel::Debug => Level::Debug,
-                ArchivedLevel::Trace => Level::Trace,
-            }
-        }
-
         let level = archive_to_level(message.level);
 
         if let Some(last) = span_stack.last_mut() {
@@ -110,7 +100,7 @@ async fn main() -> io::Result<()> {
                 line: message.line as usize,
                 module: String::from(&*message.path),
                 message: String::from(&*message.message),
-            })
+            });
         }
 
         let fmt_log = match message.level {
@@ -158,4 +148,14 @@ async fn main() -> io::Result<()> {
     }
 
     Ok(())
+}
+
+const fn archive_to_level(archive: ArchivedLevel) -> Level {
+    match archive {
+        ArchivedLevel::Error => Level::Error,
+        ArchivedLevel::Warn => Level::Warn,
+        ArchivedLevel::Info => Level::Info,
+        ArchivedLevel::Debug => Level::Debug,
+        ArchivedLevel::Trace => Level::Trace,
+    }
 }

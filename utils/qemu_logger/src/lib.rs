@@ -7,8 +7,9 @@ use core::{
 
 use kcore::{klazy, sync::SpinMutex};
 use kio::{
-    codec::{ChainedCodec, FramedWrite, Sink},
+    codec::{Chained, Encoder},
     cursor::Cursor,
+    write::{FramedWrite, Sink},
 };
 
 use mais::CobsCodec;
@@ -40,12 +41,12 @@ const BUFFER_SIZE: usize = 512;
 klazy! {
     // SAFETY: we are the only one accessing this port on initialization
     #[link_section = ".logger"]
-    pub ref static DRIVER: SpinMutex<FramedWrite<AlignedBytes<BUFFER_SIZE>, SerialPort, ChainedCodec<AlignedBytes<BUFFER_SIZE>, LogEncoder,CobsCodec>>> = unsafe {
+    pub ref static DRIVER: SpinMutex<FramedWrite<AlignedBytes<BUFFER_SIZE>, SerialPort, Chained<AlignedBytes<BUFFER_SIZE>, LogEncoder,CobsCodec>>> = unsafe {
         let mut port = SerialPort::new(0x3f8);
         port.init();
         SpinMutex::new(
-            FramedWrite::new(AlignedBytes([0; BUFFER_SIZE]), port, ChainedCodec::new(AlignedBytes([0; BUFFER_SIZE]), LogEncoder::new(), CobsCodec))
-        )
+            FramedWrite::new(AlignedBytes([0; BUFFER_SIZE]), port, LogEncoder::new().chain(AlignedBytes([0u8; BUFFER_SIZE]), CobsCodec)))
+
     };
 }
 
@@ -96,7 +97,7 @@ impl kio::codec::Encoder<LogPacket<'_>> for LogEncoder {
 
         let n = buffer
             .serialize_unsized_value(&item)
-            .map_err(|_| kio::Error {})?;
+            .map_err(|_| kio::Error::new(kio::ErrorKind::InvalidData))?;
 
         let (_, scratch, _) = buffer.into_components();
 

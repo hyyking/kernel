@@ -34,7 +34,8 @@ pub mod futures {
 pub mod sync;
 pub mod tables;
 
-
 pub mod error {
     pub trait Error {}
+
+    impl Error for &'static str {}
 }
