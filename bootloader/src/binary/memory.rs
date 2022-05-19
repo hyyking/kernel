@@ -42,7 +42,6 @@ pub struct BiosFrameAllocator<'a> {
     memory_map: E820MemoryMap<'a>,
     current_descriptor: Option<E820MemoryRegion>,
     idx: usize,
-    local_map: PhysicalFrame<Page4Kb>,
 }
 
 impl E820MemoryRegion {
@@ -67,9 +66,9 @@ impl E820MemoryRegion {
 
 impl<'a> E820MemoryMap<'a> {
     /// Create a E820MemoryMap from a pointer in virtual memory
-    pub fn from_memory(addr: VirtualAddr, len: usize, next_frame: PhysicalFrame<Page4Kb>) -> Self {
-        let memory_map = unsafe {
-            let ptr = addr.ptr::<E820MemoryRegion>().unwrap().as_ref();
+    pub unsafe fn from_memory(addr: VirtualAddr, len: usize, next_frame: PhysicalFrame<Page4Kb>) -> Self {
+        let memory_map =  unsafe {
+            let ptr = addr.ptr::<E820MemoryRegion>().unwrap().as_ptr();
             core::slice::from_raw_parts(ptr, len)
         };
         Self {
@@ -99,40 +98,29 @@ impl<'a> E820MemoryMap<'a> {
 impl<'a> BiosFrameAllocator<'a> {
     /// Creates a new frame allocator based on the given legacy memory regions. Skips any frames
     /// before the given `frame`.
-    pub fn new(memory_map: E820MemoryMap<'a>) -> Result<Self, FrameError> {
-        let mut this = Self {
+    pub const fn new(memory_map: E820MemoryMap<'a>) -> Result<Self, FrameError> {
+        Ok(Self {
             memory_map,
             idx: 0,
             current_descriptor: None,
-            local_map: PhysicalFrame::containing(PhysicalAddr::new(0)),
-        };
-        let local = this.alloc()?;
-
-        let memory_map = unsafe {
-            let ptr = local.ptr().ptr::<E820MemoryRegion>().unwrap().as_mut();
-            core::slice::from_raw_parts_mut(ptr, this.len())
-        };
-        memory_map.copy_from_slice(this.memory_map.memory_map);
-        this.memory_map.memory_map = memory_map;
-        this.local_map = local;
-        Ok(this)
+        })
     }
 
     /// Returns the number of memory regions in the underlying memory map.
     ///
     /// The function always returns the same value, i.e. the length doesn't
     /// change after calls to `allocate_frame`.
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.memory_map.len()
     }
 
     /// References the underlying memory map
-    pub fn memory_map(&self) -> &E820MemoryMap<'a> {
+    pub const fn memory_map(&self) -> &E820MemoryMap<'a> {
         &self.memory_map
     }
 
     /// Consume the allocator to return the memory map, useful to create bootinfo memory map
-    pub fn into_memory_map(self) -> E820MemoryMap<'a> {
+    pub const fn into_memory_map(self) -> E820MemoryMap<'a> {
         self.memory_map
     }
 

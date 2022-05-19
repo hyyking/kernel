@@ -106,7 +106,7 @@ where
     M: PageMapper<Page4Kb> + PageTranslator,
 {
     fn handle_load_segment(&mut self, segment: ProgramHeader) -> Result<(), FrameError> {
-        info!("Handling Segment: {:#x?}", segment);
+        info!("Segment({:?}): {} ({}K)", segment.get_type().unwrap_or(xmas_elf::program::Type::Null), segment.flags(), segment.mem_size() as usize / Page4Kb);
 
         let phys_start_addr = self.kernel.start + segment.offset();
         let start_frame = PhysicalFrame::<Page4Kb>::containing(phys_start_addr);

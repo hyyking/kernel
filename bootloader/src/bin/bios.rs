@@ -1,6 +1,6 @@
 #![no_std]
 #![no_main]
-#![feature(step_trait)]
+#![feature(step_trait, never_type)]
 
 
 #[macro_use]
@@ -13,7 +13,7 @@ use core::{
 
 use bootloader::{
     binary::{
-        bootloader::{Bootloader, Kernel, KernelError},
+        bootloader::{Bootloader, Kernel, KernelError, BootloaderError},
         memory::{BiosFrameAllocator, E820MemoryMap},
         CONFIG,
     },
@@ -67,7 +67,12 @@ pub unsafe extern "C" fn stage_4() -> ! {
     );
     qemu_logger::init().expect("unable to initialize logger");
 
-    bootloader_main(kernel)
+    if let Err(err) = bootloader_main(kernel) {
+        error!("{:?}", err);
+        libx64::diverging_hlt();
+    } else {
+        unreachable!("the kernel is loaded, damn you compiler");
+    }
 }
 
 fn make_framebuffer() -> (PhysicalAddr, FrameBufferInfo) {
@@ -102,8 +107,7 @@ fn make_framebuffer() -> (PhysicalAddr, FrameBufferInfo) {
 }
 
 
-fn bootloader_main(kernel: Result<Kernel, KernelError>) -> ! {
-
+fn bootloader_main(kernel: Result<Kernel, KernelError>) -> Result<!, BootloaderError> {
     let span = info_span!("bootloader");
     let entered = span.enter();
 
@@ -111,12 +115,16 @@ fn bootloader_main(kernel: Result<Kernel, KernelError>) -> ! {
         "BIOS boot at {:?}",
         PhysicalAddr::from_ptr(bootloader_main as *const ())
     );
+
     let kernel = kernel.expect("invalid kernel no booting will be attempted");
 
     // Extract lower 8 bits
     let memory_map = unsafe {
+    qemu_logger::dbg!(&_memory_map);
+    qemu_logger::dbg!(mmap_ent & 0xFF);
+
         E820MemoryMap::from_memory(
-            VirtualAddr::new(&_memory_map as *const _ as u64),
+            VirtualAddr::from_ptr(&_memory_map),
             usize::try_from((mmap_ent & 0xff) as u64).unwrap(),
             core::iter::Step::forward(kernel.frames().last().unwrap(), 1),
         )
@@ -125,11 +133,10 @@ fn bootloader_main(kernel: Result<Kernel, KernelError>) -> ! {
     // We identity-map all memory, so the offset between physical and virtual addresses is 0
     let bootloader = Bootloader::<OffsetMapper, _, _>::new(
         kernel,
-        BiosFrameAllocator::new(memory_map).unwrap(),
+        BiosFrameAllocator::new(memory_map)?,
         OffsetMapper::new(VirtualAddr::new(0)),
         CONFIG.boot_info_address.map(VirtualAddr::new),
-    )
-    .unwrap();
+    )?;
 
     let mut bootloader = bootloader
         .load_kernel()
@@ -137,8 +144,7 @@ fn bootloader_main(kernel: Result<Kernel, KernelError>) -> ! {
         .setup_stack(
             CONFIG.kernel_stack_address.map(VirtualAddr::new),
             CONFIG.kernel_stack_size,
-        )
-        .unwrap();
+        )?;
 
     enable_write_protect_bit();
 
@@ -150,8 +156,7 @@ fn bootloader_main(kernel: Result<Kernel, KernelError>) -> ! {
                 start,
                 info,
                 CONFIG.framebuffer_address.map(VirtualAddr::new),
-            )
-            .unwrap();
+            )?;
     }
 
     bootloader.detect_rsdp();
@@ -159,8 +164,7 @@ fn bootloader_main(kernel: Result<Kernel, KernelError>) -> ! {
     // NOTE: this could be an opt-in, see other methods (ie. id mapping, offset, temporary, recursive level4)
     // right now this is kinda needed as their is no way to use another method else
     bootloader
-        .map_physical_memory(VirtualAddr::new(0x10_0000_0000))
-        .expect("couldn't map physical memory");
+        .map_physical_memory(VirtualAddr::new(0x10_0000_0000))?;
 
     drop(entered);
     bootloader.boot()

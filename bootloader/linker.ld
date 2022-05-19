@@ -14,7 +14,7 @@ MEMORY {
 SECTIONS {
     /* buffer for loading the kernel */
     .kernel_buffer : { _kernel_buffer = .; } > KERNEL_BUFFER
-    
+
     /* bootloader page tables */
     .page_tables_ld : {
         __page_table_start = .;
@@ -38,13 +38,12 @@ SECTIONS {
         *(.context_switch)
         *(.text .text.*)
         *(.rodata .rodata.*)
-        *(.data .data.*)
+        *(.data .data.* .logger)
         *(.bss .bss.*)
         *(.got)
         . = ALIGN(512);
         _rest_of_bootloader_end_addr = .;
     } > BOOTLOADER
-    
 
     /* kernel */
     .kernel : { KEEP(*(.kernel)) } > KERNEL
