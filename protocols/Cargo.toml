@@ -14,3 +14,10 @@ log = []
 version = "0.7"
 features = ["size_32", "strict"]
 default-features = false
+
+[dev-dependencies.rkyv]
+version = "0.7"
+features = ["size_32", "strict", "validation"]
+
+[dev-dependencies.bytecheck]
+version = "0.6.8"
