@@ -36,11 +36,13 @@ impl OffsetMapper {
         }
     }
 
+    #[must_use]
     pub const fn offset(&self) -> VirtualAddr {
         self.offset
     }
 
-    pub fn translator(&self) -> &OffsetWalker<Page4Kb> {
+    #[must_use]
+    pub const fn translator(&self) -> &OffsetWalker<Page4Kb> {
         self.walker.translator()
     }
 
@@ -68,7 +70,6 @@ impl PageMapper<Page4Kb> for OffsetMapper {
         self.walker.level4()
     }
 
-    #[must_use]
     fn map<A>(
         &mut self,
         page: Page<Page4Kb>,
@@ -80,7 +81,7 @@ impl PageMapper<Page4Kb> for OffsetMapper {
         A: FrameAllocator<Page4Kb>,
     {
         let addr = page.ptr();
-        let pflags = Flags::PRESENT | Flags::RW | Flags::US;
+        let parent_flags = Flags::PRESENT | Flags::RW | Flags::US;
         trace!("Mapping page: {:?} -> {:?}", &page, &frame);
 
         let level_4 = self.walker.level4();
@@ -89,19 +90,19 @@ impl PageMapper<Page4Kb> for OffsetMapper {
         let level_3 = self
             .walker
             .walk_level3(entry)
-            .or_create(pflags, allocator)?;
+            .or_create(parent_flags, allocator)?;
 
         let entry = level_3.index_pin_mut(addr.page_table_index(Level3));
         let level_2 = self
             .walker
             .walk_level2(entry)
-            .or_create(pflags, allocator)?;
+            .or_create(parent_flags, allocator)?;
 
         let entry = level_2.index_pin_mut(addr.page_table_index(Level2));
         let level_1 = self
             .walker
             .walk_level1(entry)
-            .or_create(pflags, allocator)?;
+            .or_create(parent_flags, allocator)?;
 
         // SAFETY: we are the sole owner of this page and the entry will be valid
         unsafe {
@@ -181,7 +182,6 @@ impl PageMapper<Page2Mb> for OffsetMapper {
         self.walker.level4()
     }
 
-    #[must_use]
     fn map<A>(
         &mut self,
         page: Page<Page2Mb>,
@@ -193,7 +193,7 @@ impl PageMapper<Page2Mb> for OffsetMapper {
         A: FrameAllocator<Page4Kb>,
     {
         let addr = page.ptr();
-        let pflags = Flags::PRESENT | Flags::RW | Flags::US;
+        let parent_flags = Flags::PRESENT | Flags::RW | Flags::US;
 
         trace!("Mapping page: {:?} -> {:?}", &page, &frame);
 
@@ -203,13 +203,13 @@ impl PageMapper<Page2Mb> for OffsetMapper {
         let level_3 = self
             .walker
             .walk_level3(entry)
-            .or_create(pflags, allocator)?;
+            .or_create(parent_flags, allocator)?;
 
         let entry = level_3.index_pin_mut(addr.page_table_index(Level3));
         let level_2 = self
             .walker
             .walk_level2(entry)
-            .or_create(pflags, allocator)?;
+            .or_create(parent_flags, allocator)?;
 
         // SAFETY: we are the sole owner of this page and the entry will be valid
         unsafe {
@@ -279,7 +279,6 @@ impl PageMapper<Page1Gb> for OffsetMapper {
         self.walker.level4()
     }
 
-    #[must_use]
     fn map<A>(
         &mut self,
         page: Page<Page1Gb>,
@@ -291,7 +290,7 @@ impl PageMapper<Page1Gb> for OffsetMapper {
         A: FrameAllocator<Page4Kb>,
     {
         let addr = page.ptr();
-        let pflags = Flags::PRESENT | Flags::RW | Flags::US;
+        let parent_flags = Flags::PRESENT | Flags::RW | Flags::US;
         trace!("Mapping page: {:?} -> {:?}", &page, &frame);
 
         let level_4 = self.walker.level4();
@@ -300,7 +299,7 @@ impl PageMapper<Page1Gb> for OffsetMapper {
         let level_3 = self
             .walker
             .walk_level3(entry)
-            .or_create(pflags, allocator)?;
+            .or_create(parent_flags, allocator)?;
 
         // SAFETY: we are the sole owner of this page and the entry will be valid
         unsafe {

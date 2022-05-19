@@ -54,7 +54,7 @@ klazy! {
 
 pub static MAX_SCRATCH: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
 
-fn _qprint_encode(message: LogMessage<'_>) {
+fn _qprint_encode(message: &LogMessage<'_>) {
     let mut lock = DRIVER.lock();
     let logger = &mut *lock;
 
@@ -64,7 +64,7 @@ fn _qprint_encode(message: LogMessage<'_>) {
         rkyv::Infallible,
     );
 
-    let n = buffer.serialize_unsized_value(&message).unwrap() + SIZE_PAD; //.expect("lol");
+    let n = buffer.serialize_unsized_value(message).unwrap() + SIZE_PAD; //.expect("lol");
 
     let (buffer, scratch, _) = buffer.into_components();
 
@@ -107,25 +107,26 @@ impl log::Log for Logger {
 
         let mut cursor = kcore::io::Cursor::new(&mut message[..]);
 
-        if let Err(_) = core::fmt::write(&mut cursor, format_args!("{}", record.args())) {
-            _qprint_encode(LogMessage {
+        if core::fmt::write(&mut cursor, format_args!("{}", record.args())).is_err() {
+            _qprint_encode(&LogMessage {
                 level: Level::Error,
-                line: cursor.buffer().len() as u32,
+                line: cursor.buffer().len(),
                 path: file!(),
                 message: "oom formating log",
             });
+            return;
         }
 
         let message = unsafe { core::str::from_utf8_unchecked(cursor.buffer()) };
 
         let log = LogMessage {
             level: level_from_log(record.level()),
-            line: record.line().unwrap_or(0),
+            line: record.line().unwrap_or(0) as usize,
             path: record.module_path_static().unwrap_or("notfound"),
             message,
         };
 
-        libx64::without_interrupts(|| _qprint_encode(log));
+        libx64::without_interrupts(|| _qprint_encode(&log));
     }
 
     fn flush(&self) {}

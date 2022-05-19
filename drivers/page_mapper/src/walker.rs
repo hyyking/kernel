@@ -58,21 +58,21 @@ where
         unsafe { Self::new_with_level4(translator, level4) }
     }
 
-    pub fn translator(&self) -> &T {
+    pub const fn translator(&self) -> &T {
         &self.translator
     }
 
     pub(crate) unsafe fn new_with_level4(translator: T, level4: PinTableMut<'_, Level4>) -> Self {
         let level4 = NonNull::from(level4.get_unchecked_mut());
-        Self { translator, level4 }
+        Self { level4, translator }
     }
 }
 
+#[allow(clippy::trait_duplication_in_bounds)] // clippy ??
 impl<T, const N: usize> PageWalker<T, N>
 where
     PageCheck<N>: NotHugePageSize + NotGiantPageSize,
-    T: FrameTranslator<(), Page4Kb>
-        + FrameTranslator<Level4, Page4Kb>
+    T: FrameTranslator<Level4, Page4Kb>
         + FrameTranslator<Level3, Page4Kb>
         + FrameTranslator<Level2, Page4Kb>,
 {

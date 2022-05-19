@@ -1,3 +1,5 @@
+#![allow(clippy::module_name_repetitions)]
+
 use rkyv::{with::RefAsBox, Archive, Serialize};
 
 #[derive(
@@ -36,7 +38,7 @@ pub struct LogHeader {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
 pub struct LogMessage<'a> {
     pub level: Level,
-    pub line: u32,
+    pub line: usize,
 
     #[with(rkyv::with::RefAsBox)]
     pub path: &'a str,

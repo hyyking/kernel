@@ -12,7 +12,7 @@ use tokio::{
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> io::Result<()> {
     let mut addr = std::env::args().skip(1);
-    let addr = addr.next().ok_or(io::Error::new(
+    let addr = addr.next().ok_or_else(|| io::Error::new(
         io::ErrorKind::Other,
         "missing server address",
     ))?;
@@ -68,7 +68,7 @@ async fn main() -> io::Result<()> {
         };
 
         stdout.write_all(fmt_log.as_bytes()).await?;
-        stdout.write(b"\n").await?;
+        let _ = stdout.write(b"\n").await?;
         bytes.clear();
     }
     Ok(())

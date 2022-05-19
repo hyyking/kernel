@@ -105,6 +105,8 @@ pub struct MemoryRegion {
 
 impl MemoryRegion {
     /// Creates a new empty memory region (with length 0).
+    #[inline]
+    #[must_use]
     pub const fn empty() -> Self {
         MemoryRegion {
             start: 0,
@@ -146,6 +148,9 @@ pub struct FrameBuffer {
 
 impl FrameBuffer {
     /// Returns the raw bytes of the framebuffer as slice.
+
+    #[inline]
+    #[must_use]
     pub fn buffer(&self) -> &[u8] {
         unsafe { self.create_buffer() }
     }
@@ -160,7 +165,9 @@ impl FrameBuffer {
     }
 
     /// Returns layout and pixel format information of the framebuffer.
-    pub fn info(&self) -> FrameBufferInfo {
+    #[inline]
+    #[must_use]
+    pub const fn info(&self) -> FrameBufferInfo {
         self.info
     }
 }

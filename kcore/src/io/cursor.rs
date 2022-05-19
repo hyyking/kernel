@@ -8,6 +8,7 @@ impl<'a> Cursor<'a> {
         Self { data, cursor: 0 }
     }
 
+    #[must_use]
     pub fn buffer(&self) -> &[u8] {
         &self.data[..self.cursor]
     }

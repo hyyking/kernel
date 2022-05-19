@@ -36,14 +36,14 @@ impl LogDecoder {
                         Err(_) => return Ok(None),
                     };
                 if header.size == 0 {
-                    return Ok(None);
+                    return Err(io::ErrorKind::InvalidData.into());
                 }
 
                 src.reserve(HEADER_SIZE + header.size);
                 drop(src.split_to(HEADER_SIZE));
 
                 self.state = DecoderState::ReadingMessage(header.size);
-                return Ok(None);
+                Ok(None)
             }
             DecoderState::ReadingMessage(n) => {
                 if src.len() >= n {
@@ -51,7 +51,7 @@ impl LogDecoder {
                     self.state = DecoderState::WaitingForHeader;
                     return Ok(Some(message));
                 }
-                return Ok(None);
+                Ok(None)
             }
         }
     }

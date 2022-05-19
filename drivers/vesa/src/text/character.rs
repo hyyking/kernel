@@ -41,16 +41,23 @@ pub struct Character {
 }
 
 impl Character {
+    /// # Panics
+    /// Panics if the character is not found in the bitmap
+    #[must_use]
     pub fn new(c: char, x: usize, y: usize) -> Self {
         let bitmap = get_bitmap(c, FontWeight::Regular, BitmapHeight::Size14).unwrap();
         Self { c, bitmap, x, y }
     }
 
-    pub fn height(&self) -> usize {
+    #[inline]
+    #[must_use]
+    pub const fn height(&self) -> usize {
         self.bitmap.height()
     }
 
-    pub fn width(&self) -> usize {
+    #[inline]
+    #[must_use]
+    pub const fn width(&self) -> usize {
         self.bitmap.width()
     }
 }

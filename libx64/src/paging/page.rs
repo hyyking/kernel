@@ -12,6 +12,9 @@ use crate::{
 use super::table::Level4;
 
 pub trait PageTranslator {
+    /// # Errors
+    ///
+    /// Translations fail if the address has no associated mapping
     fn try_translate(&mut self, addr: VirtualAddr) -> Result<Translation, FrameError>;
 }
 
@@ -23,7 +26,9 @@ impl<const P: usize> TlbFlush<P>
 where
     PageCheck<P>: PageSize,
 {
-    pub fn new(page: Page<P>) -> Self {
+    #[inline]
+    #[must_use]
+    pub const fn new(page: Page<P>) -> Self {
         Self(page)
     }
 
@@ -33,6 +38,7 @@ where
     }
 
     #[inline]
+    #[allow(clippy::unused_self)]
     pub fn ignore(self) {}
 }
 
@@ -47,6 +53,9 @@ pub trait PageMapper<const N: usize>
 where
     PageCheck<N>: PageSize,
 {
+    /// # Safety
+    ///
+    /// The page must be valid and not have an associated mapper
     unsafe fn from_level4(page: super::PinTableMut<'_, Level4>) -> Self;
     fn level4(&mut self) -> super::PinTableMut<'_, Level4>;
 
@@ -63,10 +72,19 @@ where
     where
         A: FrameAllocator<Page4Kb>;
 
+    /// # Errors
+    ///
+    /// Errors if the page is not found
     fn update_flags(&mut self, page: Page<N>, flags: Flags) -> Result<TlbFlush<N>, FrameError>;
 
+    /// # Errors
+    ///
+    /// Errors if the page is not found
     fn unmap(&mut self, page: Page<N>) -> Result<TlbFlush<N>, FrameError>;
 
+    /// # Errors
+    ///
+    /// Errors if the page has been miss mapped, or no frames are available in the allocator
     fn id_map<A>(
         &mut self,
         frame: PhysicalFrame<N>,
@@ -80,6 +98,9 @@ where
         self.map(page, frame, flags, allocator)
     }
 
+    /// # Errors
+    ///
+    /// Errors on the first miss-mapped page
     fn map_range<A, P, F>(
         &mut self,
         pages: P,
@@ -108,12 +129,16 @@ where
             .try_for_each(|(page, frame)| self.map(page, frame, flags, allocator).map(flushfn))?;
 
         if method == TlbMethod::Invalidate {
-            super::invalidate_tlb()
+            super::invalidate_tlb();
         }
 
         Ok(())
     }
 
+    /// # Errors
+    ///
+    /// This method errors on the first miss-mapped page or if no frames are available in the allocator
+    #[allow(clippy::trait_duplication_in_bounds)]
     fn map_range_alloc<A, P>(
         &mut self,
         mut pages: P,
@@ -136,12 +161,14 @@ where
         })?;
 
         if method == TlbMethod::Invalidate {
-            super::invalidate_tlb()
+            super::invalidate_tlb();
         }
 
         Ok(())
     }
 
+    /// # Errors
+    /// This method errors on the first miss-mapped page
     fn id_map_range<A, F>(
         &mut self,
         mut frames: F,
@@ -161,7 +188,7 @@ where
         frames.try_for_each(|frame| self.id_map(frame, flags, allocator).map(flushfn))?;
 
         if method == TlbMethod::Invalidate {
-            super::invalidate_tlb()
+            super::invalidate_tlb();
         }
 
         Ok(())
@@ -217,11 +244,13 @@ where
 
     #[inline]
     #[must_use]
+    /// # Panics
+    /// Compile time panics if the page size isn't valid
     pub const fn alloc_layout() -> core::alloc::Layout {
         match N {
             super::Page4Kb => core::alloc::Layout::new::<[u8; 4 * crate::units::KB]>(),
             super::Page2Mb => core::alloc::Layout::new::<[u8; 2 * crate::units::MB]>(),
-            super::Page1Gb => core::alloc::Layout::new::<[u8; 1 * crate::units::GB]>(),
+            super::Page1Gb => core::alloc::Layout::new::<[u8; crate::units::GB]>(),
             _ => panic!("unsupported page size"),
         }
     }
@@ -232,6 +261,8 @@ where
         self.addr
     }
 
+    #[inline]
+    #[must_use]
     pub const fn end_ptr(self) -> VirtualAddr {
         VirtualAddr::new((self.addr.as_usize() + N) as u64)
     }
