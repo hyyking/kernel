@@ -6,8 +6,10 @@ use core::{
 };
 
 use kcore::{klazy, sync::SpinMutex};
-use kio::codec::{ChainedCodec, FramedWrite, Sink};
-use kio::cursor::Cursor;
+use kio::{
+    codec::{ChainedCodec, FramedWrite, Sink},
+    cursor::Cursor,
+};
 
 use mais::CobsCodec;
 use protocols::log::{Level, LogPacket, Message, Span};
@@ -33,15 +35,16 @@ macro_rules! dbg {
     }};
 }
 
-const BUFFER_SIZE: usize = 1024;
+const BUFFER_SIZE: usize = 512;
 
 klazy! {
     // SAFETY: we are the only one accessing this port on initialization
-    ref static DRIVER: SpinMutex<FramedWrite<[u8; BUFFER_SIZE], SerialPort, ChainedCodec<[u8; BUFFER_SIZE], LogEncoder,CobsCodec>>> = unsafe {
+    #[link_section = ".logger"]
+    pub ref static DRIVER: SpinMutex<FramedWrite<AlignedBytes<BUFFER_SIZE>, SerialPort, ChainedCodec<AlignedBytes<BUFFER_SIZE>, LogEncoder,CobsCodec>>> = unsafe {
         let mut port = SerialPort::new(0x3f8);
         port.init();
         SpinMutex::new(
-            FramedWrite::new([0; BUFFER_SIZE], port, ChainedCodec::new([0; BUFFER_SIZE], LogEncoder::new(), CobsCodec))
+            FramedWrite::new(AlignedBytes([0; BUFFER_SIZE]), port, ChainedCodec::new(AlignedBytes([0; BUFFER_SIZE]), LogEncoder::new(), CobsCodec))
         )
     };
 }
@@ -102,7 +105,7 @@ impl kio::codec::Encoder<LogPacket<'_>> for LogEncoder {
             core::sync::atomic::Ordering::Relaxed,
         );
 
-        Ok(n)
+        Ok(n + 4)
     }
 }
 
@@ -156,7 +159,7 @@ impl tracing_core::Collect for Logger {
     fn record_follows_from(&self, _span: &Id, _follows: &Id) {}
 
     fn event(&self, event: &Event<'_>) {
-        let mut buffer = [0u8; 512];
+        let mut buffer = [0u8; BUFFER_SIZE];
         let mut args = DebugArgs::from(Cursor::new(&mut buffer));
         event.record(&mut args);
         let message = unsafe { core::str::from_utf8_unchecked(args.0.buffer()) };

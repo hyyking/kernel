@@ -12,7 +12,9 @@ impl kio::codec::Encoder<&[u8]> for CobsCodec {
     where
         T: AsMut<[u8]>,
     {
-        encode(item, dst.as_mut()).map_err(|_| kio::Error {})
+        let n = encode(item, dst.as_mut()).map_err(|_| kio::Error {})?;
+        dst.as_mut()[n] = 0;
+        Ok(n+1)
     }
 }
 
@@ -251,7 +253,7 @@ mod tests {
             // https://github.com/cmcqueen/cobs-python/blob/main/python3/cobs/cobs/test.py
             let mut buffer = [0u8; 256];
             for [input, output] in PYTHON_COBS {
-                let n = encode(input, &mut buffer);
+                let n = encode(input, &mut buffer).unwrap();
                 assert_eq!(&&buffer[..n], output);
             }
         }
@@ -262,7 +264,7 @@ mod tests {
 
             let mut buffer = [0u8; 256];
             for [input, output] in WIKIPEDIA_COBS {
-                let n = encode(input, &mut buffer);
+                let n = encode(input, &mut buffer).unwrap();
                 assert_eq!(&&buffer[..n], output);
             }
         }
