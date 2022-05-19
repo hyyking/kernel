@@ -5,6 +5,9 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[dependencies.mais]
+path = "../utils/mais"
+
 [dependencies.bytes]
 version = "1"
 
@@ -15,8 +18,16 @@ default-features=false
 
 [dependencies.tokio]
 version = "1"
-features = ["net", "rt", "macros", "io-util", "io-std"]
+features = ["net", "rt", "macros", "io-util", "io-std", "time", "tracing"]
 default-features=false
+
+# [dependencies.futures_util]
+# version = "0.3"
+# default-features=false
+
+[dependencies.kcore]
+path = "../klib/kcore"
+
 
 [dependencies.tokio-util]
 version = "0.7"

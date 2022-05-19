@@ -1,58 +1,48 @@
 use std::io;
 
-use bytes::BytesMut;
-use rkyv::{util, Archive};
+use bytes::{Bytes, BytesMut};
+use rkyv::{util, ArchiveUnsized};
 
-use protocols::log::{LogHeader, LogPacket, HEADER_SIZE};
+use protocols::log::LogPacket;
 
-enum DecoderState {
-    WaitingForHeader,
-    ReadingMessage(usize),
+pub struct LogRef(pub Bytes);
+impl AsRef<<LogPacket<'static> as ArchiveUnsized>::Archived> for LogRef {
+    fn as_ref(&self) -> &<LogPacket<'static> as ArchiveUnsized>::Archived {
+        unsafe { util::archived_unsized_root::<LogPacket<'static>>(&self.0[..]) }
+    }
 }
 
-pub struct LogDecoder {
-    state: DecoderState,
-}
+pub struct LogDecoder;
 
 impl LogDecoder {
-    pub const fn new() -> Self {
-        Self {
-            state: DecoderState::WaitingForHeader,
-        }
-    }
+    #[rustfmt::skip]
+    pub const fn new() -> Self { Self }
+}
 
-    pub fn decode_ref<'a>(
-        &mut self,
-        src: &'a mut BytesMut,
-    ) -> Result<Option<(usize, &'a <LogPacket as Archive>::Archived)>, io::Error> {
-        match self.state {
-            DecoderState::WaitingForHeader => {
-                if src.len() < HEADER_SIZE {
-                    return Ok(None);
-                }
-                let header =
-                    match unsafe { rkyv::from_bytes_unchecked::<LogHeader>(&src[..HEADER_SIZE]) } {
-                        Ok(header) => header,
-                        Err(_) => return Ok(None),
-                    };
-                if header.size == 0 {
-                    return Ok(None);
-                }
+impl tokio_util::codec::Decoder for LogDecoder {
+    type Item = LogRef;
 
-                src.reserve(HEADER_SIZE + header.size);
-                drop(src.split_to(HEADER_SIZE));
+    type Error = io::Error;
 
-                self.state = DecoderState::ReadingMessage(header.size);
-                return Ok(None);
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        let buf = match src
+            .iter()
+            .enumerate()
+            .find_map(|(i, &b)| (b == 0).then_some(i + 1))
+        {
+            Some(n) => {
+                let buf = src.split_to(n);
+                src.reserve(1024);
+                buf.freeze()
             }
-            DecoderState::ReadingMessage(n) => {
-                if src.len() >= n {
-                    let message = unsafe { util::archived_unsized_root::<LogPacket>(&src[..n]) };
-                    self.state = DecoderState::WaitingForHeader;
-                    return Ok(Some((n, message)));
-                }
-                return Ok(None);
-            }
-        }
+            None => return Ok(None),
+        };
+
+        let mut decode = BytesMut::new();
+        decode.resize(buf.len(), 0);
+        let n = mais::decode(&buf[..], &mut decode[..]);
+        decode.truncate(n);
+
+        Ok(Some(LogRef(decode.freeze())))
     }
 }

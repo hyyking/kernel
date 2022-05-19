@@ -1,13 +1,43 @@
 mod codec;
 
-use std::io;
+use std::{cell::RefCell, collections::HashMap, io, rc::Rc};
 
-use protocols::log::{ArchivedLevel, ArchivedLogPacket};
+use protocols::log::{ArchivedLevel, ArchivedLogPacket, Level};
 
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
 };
+
+use tokio_util::codec::Decoder;
+
+use kcore::futures::stream::StreamExt;
+
+#[derive(Debug)]
+struct Span {
+    id: u64,
+    target: String,
+    messages: Vec<Message>,
+}
+
+#[derive(Debug)]
+pub struct Message {
+    pub level: Level,
+    pub line: usize,
+    pub module: String,
+    pub message: String,
+}
+
+impl Span {
+    #[must_use]
+    fn new(id: u64, target: String) -> Rc<RefCell<Self>> {
+        Rc::new(RefCell::new(Self {
+            id,
+            target,
+            messages: vec![],
+        }))
+    }
+}
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> io::Result<()> {
@@ -19,41 +49,73 @@ async fn main() -> io::Result<()> {
 
     let listener = TcpListener::bind(addr).await?;
 
-    let (mut stream, _) = listener.accept().await?;
+    let (stream, _) = listener.accept().await?;
+    stream.set_nodelay(true)?;
+    stream.set_linger(None)?;
 
     let mut stdout = tokio::io::stdout();
-    let mut codec = codec::LogDecoder::new();
 
-    let mut bytes = bytes::BytesMut::new();
-    while let Ok(n) = stream.read_buf(&mut bytes).await {
-        if n == 0 {
-            return Ok(());
+    let mut spans = HashMap::<u64, Rc<RefCell<Span>>>::new();
+    let mut span_stack = Vec::<Rc<RefCell<Span>>>::new();
+
+    let mut framed = codec::LogDecoder::new().framed(stream);
+
+    while let Some(message) = framed.next().await.transpose()? {
+        let message = match message.as_ref() {
+            ArchivedLogPacket::Message(message) => message,
+            ArchivedLogPacket::NewSpan(span) => {
+                spans.insert(span.id, Span::new(span.id, (&*span.target).to_string()));
+                continue;
+            }
+            ArchivedLogPacket::EnterSpan(span) => {
+                if let Some(span) = spans.get(span) {
+                    span_stack.push(Rc::clone(span));
+                    stdout
+                        .write_all(
+                            format!("OPEN: {} - {}\n", span.borrow().id, &*span.borrow().target)
+                                .as_bytes(),
+                        )
+                        .await?;
+                }
+                continue;
+            }
+            ArchivedLogPacket::ExitSpan(span) => {
+                if let Some(span) = spans.get(span) {
+                    assert_eq!(
+                        span_stack.pop().map(|s| s.borrow().id),
+                        Some(span.borrow().id)
+                    );
+                    stdout
+                        .write_all(
+                            format!("CLOSE: {} - {}\n", span.borrow().id, &*span.borrow().target)
+                                .as_bytes(),
+                        )
+                        .await?;
+                }
+                continue;
+            }
+        };
+
+        const fn archive_to_level(archive: ArchivedLevel) -> Level {
+            match archive {
+                ArchivedLevel::Error => Level::Error,
+                ArchivedLevel::Warn => Level::Warn,
+                ArchivedLevel::Info => Level::Info,
+                ArchivedLevel::Debug => Level::Debug,
+                ArchivedLevel::Trace => Level::Trace,
+            }
         }
 
-        let (n, message) = match codec.decode_ref(&mut bytes)? {
-            Some((n, message)) => (n, message),
-            None => continue,
-        };
+        let level = archive_to_level(message.level);
 
-        let message = match Some(message) {
-            Some(ArchivedLogPacket::Message(message)) => message,
-            Some(ArchivedLogPacket::NewSpan(span)) => {
-                dbg!("new", span.id, &*span.target);
-                bytes.clear();
-                continue
-            },
-            Some(ArchivedLogPacket::EnterSpan(span)) => {
-                dbg!("enter", span);
-                bytes.clear();
-                continue
-            },
-            Some(ArchivedLogPacket::ExitSpan(span)) => {
-                dbg!("exit", span);
-                bytes.clear();
-                continue
-            },
-            None => continue,
-        };
+        if let Some(last) = span_stack.last_mut() {
+            last.borrow_mut().messages.push(Message {
+                level,
+                line: message.line as usize,
+                module: String::from(&*message.path),
+                message: String::from(&*message.message),
+            })
+        }
 
         let fmt_log = match message.level {
             ArchivedLevel::Error => {
@@ -82,6 +144,7 @@ async fn main() -> io::Result<()> {
                 )
             }
             ArchivedLevel::Trace => {
+                continue;
                 format!(
                     "\u{001b}[38;2;128;128;128;2m[TRACE][{}:{}] > {}\u{001b}[0m",
                     &*message.path, message.line, &*message.message
@@ -89,9 +152,15 @@ async fn main() -> io::Result<()> {
             }
         };
 
+        for _ in 0..span_stack.len() {
+            stdout.write_all(b" ").await?;
+        }
+        if span_stack.len() >= 1 {
+            stdout.write_all("↳".as_bytes()).await?;
+        }
         stdout.write_all(fmt_log.as_bytes()).await?;
-        stdout.write(b"\n").await?;
-        drop(bytes.split_to(n));
+        stdout.write_all(b"\n").await?;
     }
+
     Ok(())
 }
