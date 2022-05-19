@@ -36,12 +36,21 @@ where
 
 pub struct IdentityTranslator;
 
-impl<L: PageLevel, const N: usize> FrameTranslator<L, N> for IdentityTranslator where PageCheck<N>: PageSize {
+impl<L: PageLevel, const N: usize> FrameTranslator<L, N> for IdentityTranslator
+where
+    PageCheck<N>: PageSize,
+{
     unsafe fn translate_frame<'a>(
         &self,
         frame: PhysicalFrame<N>,
     ) -> Pin<&'a mut PageTable<<L as PageLevel>::Next>> {
-        Pin::new_unchecked(frame.ptr().ptr::<PageTable<<L as PageLevel>::Next>>().unwrap().as_mut())
+        Pin::new_unchecked(
+            frame
+                .ptr()
+                .ptr::<PageTable<<L as PageLevel>::Next>>()
+                .unwrap()
+                .as_mut(),
+        )
     }
 }
 

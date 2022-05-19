@@ -1,4 +1,5 @@
 #![no_std]
+#![allow(clippy::used_underscore_binding)]
 
 #[cfg(test)]
 extern crate std;

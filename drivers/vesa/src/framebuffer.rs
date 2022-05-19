@@ -16,7 +16,7 @@ pub struct Framebuffer {
 #[repr(u8)]
 pub enum DrawError {
     InvalidDrawBox,
-    InvalidPixelPos
+    InvalidPixelPos,
 }
 
 impl Framebuffer {

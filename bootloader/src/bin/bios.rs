@@ -2,7 +2,6 @@
 #![no_main]
 #![feature(step_trait, never_type)]
 
-
 #[macro_use]
 extern crate tracing;
 
@@ -13,7 +12,7 @@ use core::{
 
 use bootloader::{
     binary::{
-        bootloader::{Bootloader, Kernel, KernelError, BootloaderError},
+        bootloader::{Bootloader, BootloaderError, Kernel, KernelError},
         memory::{BiosFrameAllocator, E820MemoryMap},
         CONFIG,
     },
@@ -106,7 +105,6 @@ fn make_framebuffer() -> (PhysicalAddr, FrameBufferInfo) {
     (addr, info)
 }
 
-
 fn bootloader_main(kernel: Result<Kernel, KernelError>) -> Result<!, BootloaderError> {
     let span = info_span!("bootloader");
     let entered = span.enter();
@@ -120,9 +118,6 @@ fn bootloader_main(kernel: Result<Kernel, KernelError>) -> Result<!, BootloaderE
 
     // Extract lower 8 bits
     let memory_map = unsafe {
-    qemu_logger::dbg!(&_memory_map);
-    qemu_logger::dbg!(mmap_ent & 0xFF);
-
         E820MemoryMap::from_memory(
             VirtualAddr::from_ptr(&_memory_map),
             usize::try_from((mmap_ent & 0xff) as u64).unwrap(),
@@ -138,33 +133,28 @@ fn bootloader_main(kernel: Result<Kernel, KernelError>) -> Result<!, BootloaderE
         CONFIG.boot_info_address.map(VirtualAddr::new),
     )?;
 
-    let mut bootloader = bootloader
-        .load_kernel()
-        .unwrap()
-        .setup_stack(
-            CONFIG.kernel_stack_address.map(VirtualAddr::new),
-            CONFIG.kernel_stack_size,
-        )?;
+    let mut bootloader = bootloader.load_kernel().unwrap().setup_stack(
+        CONFIG.kernel_stack_address.map(VirtualAddr::new),
+        CONFIG.kernel_stack_size,
+    )?;
 
     enable_write_protect_bit();
 
     if CONFIG.map_framebuffer {
         let (start, info) = make_framebuffer();
 
-        bootloader
-            .map_framebuffer(
-                start,
-                info,
-                CONFIG.framebuffer_address.map(VirtualAddr::new),
-            )?;
+        bootloader.map_framebuffer(
+            start,
+            info,
+            CONFIG.framebuffer_address.map(VirtualAddr::new),
+        )?;
     }
 
     bootloader.detect_rsdp();
 
     // NOTE: this could be an opt-in, see other methods (ie. id mapping, offset, temporary, recursive level4)
     // right now this is kinda needed as their is no way to use another method else
-    bootloader
-        .map_physical_memory(VirtualAddr::new(0x10_0000_0000))?;
+    bootloader.map_physical_memory(VirtualAddr::new(0x10_0000_0000))?;
 
     drop(entered);
     bootloader.boot()

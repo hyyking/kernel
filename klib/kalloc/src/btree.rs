@@ -79,7 +79,7 @@ impl BTreeElements {
                     bin.end = end;
                     root.elements[i] = Some(BTreeAllocatorBin(NonNull::from(bin)));
                 }
-                None => panic!("not enought bins"),
+                None => panic!("not enough bins"),
             }
             i += 1;
 

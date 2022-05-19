@@ -2,7 +2,11 @@ use core::arch::asm;
 
 use crate::{
     address::{PhysicalAddr, VirtualAddr},
-    paging::{frame::{PhysicalFrame, FrameTranslator}, Page4Kb, PinTableMut, table::{Level4, PageTable}},
+    paging::{
+        frame::{FrameTranslator, PhysicalFrame},
+        table::{Level4, PageTable},
+        Page4Kb, PinTableMut,
+    },
 };
 
 use bitfield::bitfield;
@@ -32,7 +36,10 @@ impl CR3 {
         PhysicalFrame::containing(PhysicalAddr::new(self.0 & 0x000F_FFFF_FFFF_F000))
     }
 
-    pub fn table<'a>(self, translator: &dyn FrameTranslator<(), Page4Kb>) -> PinTableMut<'a, Level4>  {
+    pub fn table<'a>(
+        self,
+        translator: &dyn FrameTranslator<(), Page4Kb>,
+    ) -> PinTableMut<'a, Level4> {
         PageTable::new(self, translator)
     }
 }

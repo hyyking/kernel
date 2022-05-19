@@ -45,7 +45,6 @@ pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
         PhysicalMemoryManager::init(&bi.memory_regions),
     );
 
-
     dbg!(context.layout().usable.len());
     dbg!(context.mapper.try_translate(pmo).unwrap());
 
@@ -57,12 +56,8 @@ pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
         .map(&mut context)
         .expect("unable to map the global allocator");
 
-    fb.draw(&vesa::text::Text::new(
-        "Hello World!",
-        80,
-        100,
-    ))
-      .unwrap();
+    fb.draw(&vesa::text::Text::new("Hello World!", 80, 100))
+        .unwrap();
 
     {
         /*

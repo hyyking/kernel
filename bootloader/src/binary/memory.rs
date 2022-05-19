@@ -66,8 +66,12 @@ impl E820MemoryRegion {
 
 impl<'a> E820MemoryMap<'a> {
     /// Create a E820MemoryMap from a pointer in virtual memory
-    pub unsafe fn from_memory(addr: VirtualAddr, len: usize, next_frame: PhysicalFrame<Page4Kb>) -> Self {
-        let memory_map =  unsafe {
+    pub unsafe fn from_memory(
+        addr: VirtualAddr,
+        len: usize,
+        next_frame: PhysicalFrame<Page4Kb>,
+    ) -> Self {
+        let memory_map = unsafe {
             let ptr = addr.ptr::<E820MemoryRegion>().unwrap().as_ptr();
             core::slice::from_raw_parts(ptr, len)
         };
