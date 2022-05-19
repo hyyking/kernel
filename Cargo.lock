@@ -205,12 +205,17 @@ dependencies = [
 [[package]]
 name = "kio"
 version = "0.1.0"
+dependencies = [
+ "kcore",
+]
 
 [[package]]
 name = "konsole"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "kcore",
+ "mais",
  "protocols",
  "rkyv",
  "tokio",
@@ -255,6 +260,9 @@ dependencies = [
 [[package]]
 name = "mais"
 version = "0.1.0"
+dependencies = [
+ "kio",
+]
 
 [[package]]
 name = "memchr"
@@ -333,6 +341,7 @@ dependencies = [
 name = "protocols"
 version = "0.1.0"
 dependencies = [
+ "bytecheck",
  "rkyv",
 ]
 
@@ -361,8 +370,10 @@ name = "qemu_logger"
 version = "0.1.0"
 dependencies = [
  "kcore",
+ "kio",
  "libx64",
  "log",
+ "mais",
  "protocols",
  "rkyv",
  "serialuart16550",
@@ -462,6 +473,7 @@ version = "0.1.0"
 dependencies = [
  "bitfield",
  "bitflags",
+ "kio",
  "libx64",
 ]
 
