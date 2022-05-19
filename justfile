@@ -13,7 +13,7 @@ run: konsole image
 #nc -l 8000 &
 
 @konsole:
-    cargo build --bin konsole
+    cargo build --release --bin konsole
 
 run-debug: image 
     qemu-system-x86_64 {{QEMU_ARGS}} -d int,cpu_reset -no-reboot -serial stdio
@@ -47,3 +47,7 @@ bootloader $KERNEL=`find ~+ -type f -name kernel`:
 
     cd bootloader && cargo build --bin bios --release --features bios_bin 
     printf "\e[32;1m[2/3] Bootloader build successful\n\e[0m"
+
+bootloader-doc $KERNEL=`find ~+ -type f -name kernel`:
+    cd bootloader && cargo doc --bin bios --features bios_bin --open
+
