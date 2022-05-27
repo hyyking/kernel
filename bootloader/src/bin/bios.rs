@@ -19,7 +19,7 @@ use bootloader::{
     boot_info::{FrameBufferInfo, PixelFormat},
 };
 
-use page_mapper::OffsetMapper;
+use page_mapper::{instrumented::TracingMapper, OffsetMapper};
 
 use libx64::address::{PhysicalAddr, VirtualAddr};
 
@@ -126,19 +126,21 @@ fn bootloader_main(kernel: Result<Kernel, KernelError>) -> Result<!, BootloaderE
     };
 
     // We identity-map all memory, so the offset between physical and virtual addresses is 0
-    let bootloader = Bootloader::<OffsetMapper, _, _>::new(
+    let bootloader = Bootloader::<TracingMapper<OffsetMapper>, _, _>::new(
         kernel,
         BiosFrameAllocator::new(memory_map)?,
-        OffsetMapper::new(VirtualAddr::new(0)),
+        TracingMapper::from(OffsetMapper::new(VirtualAddr::new(0))),
         CONFIG.boot_info_address.map(VirtualAddr::new),
     )?;
 
-    let mut bootloader = bootloader.load_kernel().unwrap().setup_stack(
+    enable_write_protect_bit();
+
+    let mut bootloader = bootloader.load_kernel()?.setup_stack(
         CONFIG.kernel_stack_address.map(VirtualAddr::new),
         CONFIG.kernel_stack_size,
     )?;
 
-    enable_write_protect_bit();
+    bootloader.detect_rsdp();
 
     if CONFIG.map_framebuffer {
         let (start, info) = make_framebuffer();
@@ -150,10 +152,8 @@ fn bootloader_main(kernel: Result<Kernel, KernelError>) -> Result<!, BootloaderE
         )?;
     }
 
-    bootloader.detect_rsdp();
-
     // NOTE: this could be an opt-in, see other methods (ie. id mapping, offset, temporary, recursive level4)
-    // right now this is kinda needed as their is no way to use another method else
+    // right now this is kinda needed as their is no way to use another method
     bootloader.map_physical_memory(VirtualAddr::new(0x10_0000_0000))?;
 
     drop(entered);

@@ -13,7 +13,7 @@ pub type Result<T> = core::result::Result<T, crate::Error>;
 #[derive(Debug, Clone, Copy)]
 pub struct Error {
     kind: ErrorKind,
- //   message: E
+    //   message: E
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -40,7 +40,7 @@ impl Error {
 
 impl From<ErrorKind> for Error {
     fn from(kind: ErrorKind) -> Self {
-        Self {kind}
+        Self { kind }
     }
 }
 

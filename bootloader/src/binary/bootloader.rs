@@ -209,11 +209,13 @@ where
     fn create_mappers(allocator: &mut A, mapper: BM) -> (KM, BM) {
         info!("Creating page tables");
 
+        // NOTE: why should we assume this frame is mapped, nothing says it comes from the first Gb?
+        // If I try to id_map it says it is, there may be a way around that but works for now.
         unsafe {
             let frame = allocator.alloc().expect("no unused frames");
             let mut page = mapper.translate_frame(frame);
-            page.as_mut().clear();
 
+            page.as_mut().clear();
             (
                 <KM as PageMapper<Page4Kb>>::from_level4(page),
                 <BM as PageMapper<Page4Kb>>::from_level4(control::cr3().table(&IdentityTranslator)),
@@ -226,8 +228,9 @@ impl<KM, BM, A, S> Bootloader<KM, BM, A, Kernel, S>
 where
     A: BootFrameAllocator,
     KM: PageMapper<Page4Kb> + PageMapper<Page2Mb> + PageTranslator,
-    BM: PageMapper<Page4Kb> + PageMapper<Page2Mb> + FrameTranslator<(), Page4Kb>,
+    BM: PageMapper<Page4Kb> + PageMapper<Page2Mb>,
 {
+    #[cold]
     pub fn load_kernel(
         mut self,
     ) -> Result<Bootloader<KM, BM, A, LoadedKernel, S>, BootloaderError> {
@@ -268,6 +271,7 @@ where
     A: BootFrameAllocator,
     KM: PageMapper<Page4Kb>,
 {
+    #[cold]
     pub fn setup_stack(
         mut self,
         start: Option<VirtualAddr>,
@@ -277,7 +281,7 @@ where
         let size = size.unwrap_or(20 * Page4Kb as u64);
         let stack = Stack { start, size };
 
-        trace!("Mapping stack at: {:?}", stack.pages());
+        info!("Mapping stack at: {:?}", stack.pages());
 
         self.kernel_mapper
             .map_range_alloc(
@@ -304,19 +308,22 @@ where
 impl<KM, BM, A> Bootloader<KM, BM, A, LoadedKernel, Stack>
 where
     A: BootFrameAllocator,
-    KM: PageMapper<Page4Kb> + PageMapper<Page2Mb> + PageTranslator,
-    BM: PageMapper<Page4Kb> + PageMapper<Page2Mb> + FrameTranslator<(), Page4Kb>,
+    KM: PageMapper<Page4Kb> + PageMapper<Page2Mb>,
+    BM: PageMapper<Page4Kb> + PageMapper<Page2Mb>,
 {
+    #[cold]
     pub fn map_physical_memory(&mut self, offset: VirtualAddr) -> Result<(), BootloaderError> {
         info!("Mapping physical memory");
 
         let max_phys = self.allocator.max_physical_address();
 
         let memory = FrameRange::<Page2Mb>::new_addr(PhysicalAddr::new(0), max_phys);
+
         self.kernel_mapper.map_range(
-            memory
-                .clone()
-                .map(|frame| Page::<Page2Mb>::containing(offset + frame.ptr().as_u64())),
+            PageRange::new_addr(
+                offset + memory.start().as_u64(),
+                offset + memory.end().as_u64(),
+            ),
             memory,
             Flags::PRESENT | Flags::RW,
             &mut self.allocator,
@@ -330,7 +337,7 @@ where
 
         Ok(())
     }
-
+    #[cold]
     pub fn map_framebuffer(
         &mut self,
         buffer_start: PhysicalAddr,
@@ -342,7 +349,7 @@ where
         let location = location.unwrap_or_else(|| self.entries.get_free_address());
         let pages = PageRange::<Page4Kb>::with_size(location, info.byte_len as u64);
 
-        info!("Mapping framebuffer at {:?} to {:?}", frames, pages);
+        info!("Mapping framebuffer");
 
         self.kernel_mapper.map_range(
             pages,
@@ -366,6 +373,7 @@ where
         Ok(())
     }
 
+    #[cold]
     pub fn detect_rsdp(&mut self) {
         info!("Detecting root system descriptor page table");
         use rsdp::{
@@ -403,7 +411,7 @@ where
     }
 
     #[cold]
-    pub fn boot(mut self) -> ! {
+    pub fn boot(mut self) -> Result<!, BootloaderError> {
         // identity-map context switch function, so that we don't get an immediate pagefault
         // after switching the active page table
         info!(
@@ -416,14 +424,11 @@ where
                 Flags::PRESENT,
                 &mut self.allocator,
             )
-            .map(libx64::paging::page::TlbFlush::ignore)
-            .expect("unable to map context switch");
+            .map(libx64::paging::page::TlbFlush::ignore)?;
 
         // create memory regions in the boot info
-        let memory_regions = self
-            .allocator
-            .write_memory_map(self.memory_map)
-            .expect("unable to write memory map");
+        let memory_regions = self.allocator.write_memory_map(self.memory_map)?;
+
         unsafe {
             addr_of_mut!((*self.bootinfo.as_mut_ptr()).memory_regions).write(memory_regions.into());
         }

@@ -14,6 +14,7 @@ use kcore::futures::stream::StreamExt;
 struct Span {
     id: u64,
     target: String,
+    fields: String,
     messages: Vec<Message>,
 }
 
@@ -27,10 +28,11 @@ pub struct Message {
 
 impl Span {
     #[must_use]
-    fn new(id: u64, target: String) -> Rc<RefCell<Self>> {
+    fn new(id: u64, target: String, fields: String) -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(Self {
             id,
             target,
+            fields,
             messages: vec![],
         }))
     }
@@ -46,8 +48,6 @@ async fn main() -> io::Result<()> {
     let listener = TcpListener::bind(addr).await?;
 
     let (stream, _) = listener.accept().await?;
-    stream.set_nodelay(true)?;
-    stream.set_linger(None)?;
 
     let mut stdout = tokio::io::stdout();
 
@@ -60,15 +60,23 @@ async fn main() -> io::Result<()> {
         let message = match message.as_ref() {
             ArchivedLogPacket::Message(message) => message,
             ArchivedLogPacket::NewSpan(span) => {
-                spans.insert(span.id, Span::new(span.id, (&*span.target).to_string()));
+                spans.insert(
+                    span.id,
+                    Span::new(
+                        span.id,
+                        (&*span.target).to_string(),
+                        (&*span.fields).to_string(),
+                    ),
+                );
                 continue;
             }
             ArchivedLogPacket::EnterSpan(span) => {
                 if let Some(span) = spans.get(span) {
                     span_stack.push(Rc::clone(span));
+                    let s = RefCell::borrow(&span);
                     stdout
                         .write_all(
-                            format!("OPEN: {} - {}\n", span.borrow().id, &*span.borrow().target)
+                            format!("OPEN: {} - {} - fields: {}\n", s.id, s.target, s.fields)
                                 .as_bytes(),
                         )
                         .await?;
@@ -77,15 +85,10 @@ async fn main() -> io::Result<()> {
             }
             ArchivedLogPacket::ExitSpan(span) => {
                 if let Some(span) = spans.get(span) {
-                    assert_eq!(
-                        span_stack.pop().map(|s| s.borrow().id),
-                        Some(span.borrow().id)
-                    );
+                    let s = RefCell::borrow(&span);
+                    assert_eq!(span_stack.pop().map(|sp| sp.borrow().id), Some(s.id));
                     stdout
-                        .write_all(
-                            format!("CLOSE: {} - {}\n", span.borrow().id, &*span.borrow().target)
-                                .as_bytes(),
-                        )
+                        .write_all(format!("CLOSE: {} - {}\n", s.id, s.target).as_bytes())
                         .await?;
                 }
                 continue;

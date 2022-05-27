@@ -189,7 +189,7 @@ pub trait BootFrameAllocator: libx64::paging::frame::FrameAllocator<Page4Kb> {
     fn write_memory_map<'a>(
         &self,
         mem: &'a mut [MaybeUninit<MemoryRegion>],
-    ) -> Result<&'a mut [MemoryRegion], ()>;
+    ) -> Result<&'a mut [MemoryRegion], FrameError>;
 
     fn max_physical_address(&self) -> PhysicalAddr;
 
@@ -200,7 +200,7 @@ impl<'a> BootFrameAllocator for BiosFrameAllocator<'a> {
     fn write_memory_map<'b>(
         &self,
         mem: &'b mut [MaybeUninit<MemoryRegion>],
-    ) -> Result<&'b mut [MemoryRegion], ()> {
+    ) -> Result<&'b mut [MemoryRegion], FrameError> {
         construct_memory_map(self.memory_map(), mem)
     }
 
@@ -222,7 +222,7 @@ impl<'a> BootFrameAllocator for BiosFrameAllocator<'a> {
 pub fn construct_memory_map<'a>(
     mem: &E820MemoryMap<'_>,
     regions: &'a mut [MaybeUninit<MemoryRegion>],
-) -> Result<&'a mut [MemoryRegion], ()> {
+) -> Result<&'a mut [MemoryRegion], FrameError> {
     let mut next_index = 0;
 
     for descriptor in mem.memory_map {
@@ -267,11 +267,11 @@ fn add_region(
     region: MemoryRegion,
     regions: &mut [MaybeUninit<MemoryRegion>],
     next_index: &mut usize,
-) -> Result<(), ()> {
+) -> Result<(), FrameError> {
     unsafe {
         regions
             .get_mut(*next_index)
-            .ok_or(())?
+            .ok_or(FrameError::EntryMissing)?
             .as_mut_ptr()
             .write(region)
     };

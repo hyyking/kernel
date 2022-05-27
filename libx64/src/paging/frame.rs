@@ -370,7 +370,7 @@ where
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "FrameRangeInclusive<{}>({:#x}..{:#x})",
+            "FrameRange<{}>({:#x}..{:#x})",
             pretty_pagesize(N),
             self.start().as_u64(),
             self.end().as_u64(),

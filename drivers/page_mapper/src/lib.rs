@@ -3,6 +3,7 @@
 #[macro_use]
 extern crate tracing;
 
+pub mod instrumented;
 pub mod offset;
 pub mod walker;
 
@@ -55,12 +56,6 @@ impl OffsetMapper {
     }
 }
 
-impl PageTranslator for OffsetMapper {
-    fn try_translate(&mut self, addr: VirtualAddr) -> Result<Translation, FrameError> {
-        self.walker.try_translate_addr(addr)
-    }
-}
-
 impl PageMapper<Page4Kb> for OffsetMapper {
     unsafe fn from_level4(page: PinTableMut<'_, Level4>) -> Self {
         Self::from_p4(page, VirtualAddr::new(0))
@@ -70,7 +65,6 @@ impl PageMapper<Page4Kb> for OffsetMapper {
         self.walker.level4()
     }
 
-    // #[tracing::instrument(skip(self, allocator), target="konsole::page_map")]
     fn map<A>(
         &mut self,
         page: Page<Page4Kb>,
@@ -83,7 +77,6 @@ impl PageMapper<Page4Kb> for OffsetMapper {
     {
         let addr = page.ptr();
         let parent_flags = Flags::PRESENT | Flags::RW | Flags::US;
-        trace!("Mapping page: {:?} -> {:?}", &page, &frame);
 
         let level_4 = self.walker.level4();
 
@@ -115,7 +108,6 @@ impl PageMapper<Page4Kb> for OffsetMapper {
         Ok(TlbFlush::new(page))
     }
 
-    #[tracing::instrument(skip(self), target = "konsole::page_update")]
     fn update_flags(
         &mut self,
         page: Page<Page4Kb>,
@@ -147,7 +139,6 @@ impl PageMapper<Page4Kb> for OffsetMapper {
         Ok(TlbFlush::new(page))
     }
 
-    #[tracing::instrument(skip(self), target = "konsole::page_unmap")]
     fn unmap(&mut self, page: Page<Page4Kb>) -> Result<TlbFlush<Page4Kb>, FrameError> {
         let addr = page.ptr();
 
@@ -185,7 +176,6 @@ impl PageMapper<Page2Mb> for OffsetMapper {
         self.walker.level4()
     }
 
-    // #[tracing::instrument(skip(self, allocator), target="konsole::page_map")]
     fn map<A>(
         &mut self,
         page: Page<Page2Mb>,
@@ -198,8 +188,6 @@ impl PageMapper<Page2Mb> for OffsetMapper {
     {
         let addr = page.ptr();
         let parent_flags = Flags::PRESENT | Flags::RW | Flags::US;
-
-        trace!("Mapping page: {:?} -> {:?}", &page, &frame);
 
         let level_4 = self.walker.level4();
 
@@ -225,7 +213,6 @@ impl PageMapper<Page2Mb> for OffsetMapper {
         Ok(TlbFlush::new(page))
     }
 
-    #[tracing::instrument(skip(self), target = "konsole::page_update")]
     fn update_flags(
         &mut self,
         page: Page<Page2Mb>,
@@ -252,7 +239,6 @@ impl PageMapper<Page2Mb> for OffsetMapper {
         Ok(TlbFlush::new(page))
     }
 
-    #[tracing::instrument(skip(self), target = "konsole::page_unmap")]
     fn unmap(&mut self, page: Page<Page2Mb>) -> Result<TlbFlush<Page2Mb>, FrameError> {
         let addr = page.ptr();
 
@@ -285,7 +271,6 @@ impl PageMapper<Page1Gb> for OffsetMapper {
         self.walker.level4()
     }
 
-    #[tracing::instrument(skip(self, allocator), target = "konsole::page_map")]
     fn map<A>(
         &mut self,
         page: Page<Page1Gb>,
@@ -298,7 +283,6 @@ impl PageMapper<Page1Gb> for OffsetMapper {
     {
         let addr = page.ptr();
         let parent_flags = Flags::PRESENT | Flags::RW | Flags::US;
-        trace!("Mapping page: {:?} -> {:?}", &page, &frame);
 
         let level_4 = self.walker.level4();
 
@@ -317,7 +301,6 @@ impl PageMapper<Page1Gb> for OffsetMapper {
         Ok(TlbFlush::new(page))
     }
 
-    #[tracing::instrument(skip(self), target = "konsole::page_update")]
     fn update_flags(
         &mut self,
         page: Page<Page1Gb>,
@@ -338,7 +321,6 @@ impl PageMapper<Page1Gb> for OffsetMapper {
         Ok(TlbFlush::new(page))
     }
 
-    #[tracing::instrument(skip(self), target = "konsole::page_unmap")]
     fn unmap(&mut self, page: Page<Page1Gb>) -> Result<TlbFlush<Page1Gb>, FrameError> {
         let addr = page.ptr();
 
@@ -353,6 +335,12 @@ impl PageMapper<Page1Gb> for OffsetMapper {
             entry.as_mut().clear();
         }
         Ok(TlbFlush::new(page))
+    }
+}
+
+impl PageTranslator for OffsetMapper {
+    fn try_translate(&mut self, addr: VirtualAddr) -> Result<Translation, FrameError> {
+        self.walker.try_translate_addr(addr)
     }
 }
 

@@ -1,7 +1,15 @@
 [build]
 target = "x86_64-bootloader.json"
-rustflags = ["-C", "opt-level=z"]
+rustflags = ["-C", "save-temps", "-Z", "share-generics=y"]
 
 [unstable]
 build-std = ["core"]
 build-std-features = ["compiler-builtins-mem"]
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = "thin"
+panic = "abort"
+codegen-units = 3 # 1 make the linking fail
+overflow-checks = false

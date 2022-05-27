@@ -7,7 +7,9 @@ use libx64::{
     paging::{
         entry::Flags,
         frame::{FrameAllocator, FrameError, FrameRange, PhysicalFrame},
-        page::{Page, PageMapper, PageRange, PageRangeInclusive, PageTranslator, TlbFlush},
+        page::{
+            Page, PageMapper, PageRange, PageRangeInclusive, PageTranslator, TlbFlush, TlbMethod,
+        },
         table::Translation,
         Page4Kb,
     },
@@ -86,6 +88,8 @@ where
             }
         }
 
+        info!("Applying rellocations");
+
         // Apply relocations in virtual memory.
         for program_header in elf_file.program_iter() {
             if let Type::Dynamic = program_header.get_type()? {
@@ -119,8 +123,11 @@ where
             (phys_start_addr + segment.file_size()).align_up(Page4Kb as u64),
         );
 
-        let virt_start_addr = self.kernel.offset() + segment.virtual_addr();
-        let start_page = Page::<Page4Kb>::containing(virt_start_addr);
+        let start_page = Page::<Page4Kb>::containing(self.kernel.offset() + segment.virtual_addr());
+        let end_page = Page::<Page4Kb>::containing(
+            (self.kernel.offset() + segment.virtual_addr() + segment.file_size())
+                .align_up(Page4Kb as u64),
+        );
 
         let mut segment_flags = Flags::PRESENT;
 
@@ -134,15 +141,23 @@ where
             segment_flags |= Flags::RW;
         }
 
-        // map all frames of the segment at the desired virtual address
-        for frame in FrameRange::new(start_frame, end_frame) {
-            let offset = frame.ptr().as_u64() - start_frame.ptr().as_u64();
-            let page = Page::containing(VirtualAddr::new(start_page.ptr().as_u64() + offset));
-            self.page_table
-                .map(page, frame, segment_flags, self.frame_allocator)
-                .map(TlbFlush::ignore)?
-        }
-
+        self.page_table.map_range(
+            PageRange::new(start_page, end_page),
+            FrameRange::new(start_frame, end_frame),
+            segment_flags,
+            self.frame_allocator,
+            TlbMethod::Ignore,
+        )?;
+        /*
+                // map all frames of the segment at the desired virtual address
+                for frame in FrameRange::new(start_frame, end_frame) {
+                    let offset = frame.ptr().as_u64() - start_frame.ptr().as_u64();
+                    let page = Page::containing(VirtualAddr::new(start_page.ptr().as_u64() + offset));
+                    self.page_table
+                        .map(page, frame, segment_flags, self.frame_allocator)
+                        .map(TlbFlush::ignore)?
+                }
+        */
         // Handle .bss section (mem_size > file_size)
         if segment.mem_size() > segment.file_size() {
             // .bss section (or similar), which needs to be mapped and zeroed
@@ -301,17 +316,10 @@ where
             let end = start + program_header.mem_size();
             let start_page = Page::<Page4Kb>::containing(start);
             let end_page = Page::<Page4Kb>::containing(end);
+
             for page in PageRange::new(start_page, end_page) {
                 // Translate the page and get the flags.
-                let res = self.page_table.try_translate(page.ptr());
-                let flags = match res {
-                    Ok(Translation {
-                        addr: _,
-                        offset: _,
-                        flags,
-                    }) => flags,
-                    Err(_) => panic!("ERROR"),
-                };
+                let Translation { flags, .. } = self.page_table.try_translate(page.ptr())?;
 
                 if flags.contains(COPIED) {
                     // Remove the flag.

@@ -97,9 +97,10 @@ impl SerialPort {
     }
 
     /// Sends a byte on the serial port.
-    pub fn send(&mut self, data: u8) {
+    pub fn send_char(&mut self, c: char) {
+        assert!(char::is_ascii(&c));
         unsafe {
-            match data {
+            match c as u8 {
                 8 | 0x7F => {
                     wait_for!(self.line_sts().contains(LineStsFlags::OUTPUT_EMPTY));
                     self.data.write(8);
@@ -108,11 +109,18 @@ impl SerialPort {
                     wait_for!(self.line_sts().contains(LineStsFlags::OUTPUT_EMPTY));
                     self.data.write(8);
                 }
-                _ => {
+                data => {
                     wait_for!(self.line_sts().contains(LineStsFlags::OUTPUT_EMPTY));
                     self.data.write(data);
                 }
             }
+        }
+    }
+
+    pub fn send_raw(&mut self, data: u8) {
+        unsafe {
+            wait_for!(self.line_sts().contains(LineStsFlags::OUTPUT_EMPTY));
+            self.data.write(data);
         }
     }
 
@@ -127,19 +135,19 @@ impl SerialPort {
 
 impl kio::write::Write for SerialPort {
     fn write(&mut self, buffer: &[u8]) -> kio::Result<usize> {
-        buffer.iter().copied().for_each(|b| self.send(b));
+        buffer.iter().copied().for_each(|b| self.send_raw(b));
         Ok(buffer.len())
     }
 
     fn write_all(&mut self, buffer: &[u8]) -> kio::Result<()> {
-        buffer.iter().copied().for_each(|b| self.send(b));
+        buffer.iter().copied().for_each(|b| self.send_raw(b));
         Ok(())
     }
 }
 
 impl core::fmt::Write for SerialPort {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        s.bytes().into_iter().for_each(|b| self.send(b));
+        s.chars().into_iter().for_each(|b| self.send_char(b));
         Ok(())
     }
 }

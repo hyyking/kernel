@@ -41,6 +41,9 @@ pub struct Span<'a> {
 
     #[with(RefAsBox)]
     pub target: &'a str,
+
+    #[with(RefAsBox)]
+    pub fields: &'a str,
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug)]
@@ -58,7 +61,7 @@ pub struct Message<'a> {
 
 #[cfg(test)]
 mod test {
-    use rkyv::ser::Serializer;
+    use rkyv::{ser::Serializer, AlignedVec};
 
     use super::*;
 
@@ -67,6 +70,7 @@ mod test {
         let p = LogPacket::NewSpan(Span {
             id: 1,
             target: "bios",
+            fields: "",
         });
         // let a = rkyv::util::to_bytes::<_, 512>(&p).unwrap();
         let mut s = rkyv::ser::serializers::AllocSerializer::<512>::default();
@@ -86,5 +90,20 @@ mod test {
         }
 
         std::dbg!(p, offset);
+    }
+
+    #[test]
+    fn deser() {
+        let mut input = AlignedVec::new();
+        input.extend_from_slice(
+     b"map_rangepages=PageRange<2Mb>(0x1000000000..0x1100000000),frames=FrameRange<2Mb>(0x0..0x100000000),flags=3,\0\0\0\0\0\0\0\0\0\0\0\0\0\x08\0\x08\x01\x01\x01\x01\x01\x01\x06\x80\xff\xff\xff\t\x01\x01\x06\x81\xff\xff\xffb\x01\x01\x05\xe0\xff\xff\xff"
+        );
+
+        let val = unsafe { rkyv::archived_unsized_root::<LogPacket>(&input[..]) };
+
+        match val {
+            ArchivedLogPacket::NewSpan(msg) => {}
+            _ => unreachable!(),
+        }
     }
 }

@@ -38,23 +38,25 @@ pub fn kmain(bi: &'static mut bootloader::BootInfo) -> ! {
     libx64::sti();
 
     let pmo = VirtualAddr::new(bi.physical_memory_offset);
+    /*
 
-    let mut context = crate::mem::context::MemoryContext::new(
-        MemoryLayout::init(&bi.memory_regions).expect("memory layout"),
-        page_mapper::OffsetMapper::new(pmo),
-        PhysicalMemoryManager::init(&bi.memory_regions),
-    );
+        let mut context = crate::mem::context::MemoryContext::new(
+            MemoryLayout::init(&bi.memory_regions).expect("memory layout"),
+            page_mapper::OffsetMapper::new(pmo),
+            PhysicalMemoryManager::init(&bi.memory_regions),
+        );
 
-    dbg!(context.layout().usable.len());
-    dbg!(context.mapper.try_translate(pmo).unwrap());
+        dbg!(context.layout().usable.len());
+        dbg!(context.mapper.try_translate(pmo).unwrap());
+
+        mem::galloc::GLOBAL_ALLOC
+            .map(&mut context)
+            .expect("unable to map the global allocator");
+    */
 
     let f = bi.framebuffer.as_mut().unwrap();
     let info = f.info();
     let mut fb = vesa::framebuffer::Framebuffer::new(f.buffer_mut(), info);
-
-    mem::galloc::GLOBAL_ALLOC
-        .map(&mut context)
-        .expect("unable to map the global allocator");
 
     fb.draw(&vesa::text::Text::new("Hello World!", 80, 100))
         .unwrap();

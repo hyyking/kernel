@@ -95,10 +95,10 @@ impl kio::codec::Encoder<LogPacket<'_>> for LogEncoder {
             rkyv::Infallible,
         );
 
-        let n = buffer
+        buffer
             .serialize_unsized_value(&item)
             .map_err(|_| kio::Error::new(kio::ErrorKind::InvalidData))?;
-
+        let n = buffer.pos();
         let (_, scratch, _) = buffer.into_components();
 
         MAX_SCRATCH.store(
@@ -106,7 +106,7 @@ impl kio::codec::Encoder<LogPacket<'_>> for LogEncoder {
             core::sync::atomic::Ordering::Relaxed,
         );
 
-        Ok(n + 4)
+        Ok(n)
     }
 }
 
@@ -125,7 +125,7 @@ impl<'a> From<Cursor<'a>> for DebugArgs<'a> {
 impl tracing_core::field::Visit for DebugArgs<'_> {
     fn record_debug(&mut self, field: &tracing_core::Field, value: &dyn core::fmt::Debug) {
         self.0
-            .write_fmt(format_args!("{} = {:?}", field.name(), value))
+            .write_fmt(format_args!("{}={:?},", field.name(), value))
             .unwrap();
     }
 }
@@ -142,9 +142,15 @@ impl tracing_core::Collect for Logger {
         }
         let id = Id::from_u64(SPANS.fetch_add(1, Ordering::Relaxed));
 
+        let mut buffer = [0u8; BUFFER_SIZE];
+        let mut args = DebugArgs::from(Cursor::new(&mut buffer));
+        attr.record(&mut args);
+        let fields = unsafe { core::str::from_utf8_unchecked(args.0.buffer()) };
+
         let span = Span {
             id: id.into_u64(),
             target: attr.metadata().target(),
+            fields,
         };
 
         libx64::without_interrupts(|| _qprint_encode(LogPacket::NewSpan(span)));
