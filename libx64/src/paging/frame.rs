@@ -108,6 +108,13 @@ where
     pub const fn ptr(self) -> PhysicalAddr {
         self.addr
     }
+
+    #[inline]
+    pub fn clear(&mut self) {
+        let ptr = self.ptr().ptr::<u8>().unwrap().as_ptr();
+        let slice = unsafe { core::slice::from_raw_parts_mut(ptr, N / 8) };
+        slice.fill(0);
+    }
 }
 
 impl<const N: usize> core::iter::Step for PhysicalFrame<N>

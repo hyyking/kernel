@@ -106,7 +106,14 @@ fn make_framebuffer() -> (PhysicalAddr, FrameBufferInfo) {
 }
 
 fn bootloader_main(kernel: Result<Kernel, KernelError>) -> Result<!, BootloaderError> {
-    let span = info_span!("bootloader");
+    let span = info_span!(
+        "bootloader",
+        version = concat!(
+            env!("CARGO_PKG_VERSION_MAJOR"), ".",
+            env!("CARGO_PKG_VERSION_MINOR"), ".",
+            env!("CARGO_PKG_VERSION_PATCH")
+        )
+    );
     let entered = span.enter();
 
     info!(

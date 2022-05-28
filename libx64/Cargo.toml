@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 bitflags = {version="1", default-features=false}
 bitfield = {path="../utils/bitfield"}
+tracing = {path = "../utils/tracing/tracing", default-features=false, features=["attributes"]}

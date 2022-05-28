@@ -8,7 +8,7 @@ use libx64::{
         entry::Flags,
         frame::{FrameAllocator, FrameError, FrameRange, PhysicalFrame},
         page::{
-            Page, PageMapper, PageRange, PageRangeInclusive, PageTranslator, TlbFlush, TlbMethod,
+            Page, PageMapper, PageRange, PageTranslator, TlbFlush, TlbMethod,
         },
         table::Translation,
         Page4Kb,
@@ -111,10 +111,10 @@ where
 {
     fn handle_load_segment(&mut self, segment: ProgramHeader) -> Result<(), FrameError> {
         info!(
-            "Segment({:?}): {} ({}K)",
+            "Segment({:?}): {} ({}KiB)",
             segment.get_type().unwrap_or(xmas_elf::program::Type::Null),
             segment.flags(),
-            segment.mem_size() as usize / Page4Kb
+            segment.file_size() as usize / libx64::units::KB,
         );
 
         let phys_start_addr = self.kernel.start + segment.offset();
@@ -173,6 +173,12 @@ where
         segment_flags: Flags,
     ) -> Result<(), FrameError> {
         info!("Mapping bss section");
+        info!(
+            "Segment({:?}): {} ({}KiB)",
+            segment.get_type().unwrap_or(xmas_elf::program::Type::Null),
+            segment.flags(),
+            segment.file_size() as usize / libx64::units::KB,
+        );
 
         let virt_start_addr = self.kernel.offset() + segment.virtual_addr();
         let mem_size = segment.mem_size();
@@ -181,10 +187,6 @@ where
         // calculate virual memory region that must be zeroed
         let zero_start = virt_start_addr + file_size;
         let zero_end = virt_start_addr + mem_size;
-
-        // a type alias that helps in efficiently clearing a page
-        type PageArray = [u8; Page4Kb / 8];
-        const ZERO_ARRAY: PageArray = [0; Page4Kb / 8];
 
         // In some cases, `zero_start` might not be page-aligned. This requires some
         // special treatment because we can't safely zero a frame of the original file.
@@ -235,22 +237,14 @@ where
         let start_page = Page::<Page4Kb>::containing(
             VirtualAddr::new(zero_start.as_u64()).align_up(Page4Kb as u64),
         );
-        let end_page = Page::<Page4Kb>::containing(zero_end);
-        for page in PageRangeInclusive::new(start_page, end_page) {
-            // allocate a new unused frame
-            let frame = self.frame_allocator.alloc().unwrap();
+        let end_page = Page::<Page4Kb>::containing(zero_end.align_up(Page4Kb as u64));
 
-            // zero frame, utilizing identity-mapping
-            let frame_ptr = frame.ptr().as_u64() as *mut PageArray;
-            unsafe { frame_ptr.write(ZERO_ARRAY) };
-
-            // map frame
-            self.page_table
-                .map(page, frame, segment_flags, self.frame_allocator)
-                .map(TlbFlush::ignore)?;
-        }
-
-        Ok(())
+        self.page_table.map_range_alloc(
+            PageRange::new(start_page, end_page),
+            segment_flags,
+            self.frame_allocator,
+            TlbMethod::Ignore,
+        )
     }
 
     /// This method is intended for making the memory loaded by a Load segment mutable.

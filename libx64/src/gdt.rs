@@ -60,8 +60,8 @@ impl GlobalDescriptorTable {
         }
     }
 
-    #[inline]
-    pub fn add_entry<T: ToGdtEntry>(&mut self, entry: T) -> SegmentSelector {
+    pub fn add_entry<T: ToGdtEntry + core::fmt::Debug>(&mut self, entry: T) -> SegmentSelector {
+        tracing::trace!(entry = debug(&entry));
         let idx = match entry.to_gdt_entry() {
             GdtEntry::Null => self.push(0),
             GdtEntry::User(user) => unsafe {

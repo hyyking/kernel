@@ -152,7 +152,8 @@ where
         };
 
         pages.try_for_each(|page| {
-            let frame = <A as FrameAllocator<N>>::alloc(allocator)?;
+            let mut frame = <A as FrameAllocator<N>>::alloc(allocator)?;
+            frame.clear();
             self.map(page, frame, flags, allocator).map(flushfn)
         })?;
 
