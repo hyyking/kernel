@@ -3,9 +3,6 @@
 
 extern crate alloc;
 
-#[macro_use]
-extern crate log;
-
 use alloc::{alloc::Allocator, boxed::Box, collections::VecDeque};
 
 use core::{
@@ -103,7 +100,7 @@ where
             let waker = SchedulerWaker::waker();
             let mut context = Context::from_waker(&waker);
             match Pin::new(&mut task).poll(&mut context) {
-                Poll::Ready(a) => debug!("task ended {:?}", a),
+                Poll::Ready(_a) => (),
                 Poll::Pending => self.tasks.push_back(task),
             }
         }

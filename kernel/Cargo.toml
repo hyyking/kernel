@@ -1,3 +1,5 @@
+cargo-features = ["workspace-inheritance"]
+
 [package]
 name = "kernel"
 version = "0.1.0"
@@ -10,22 +12,25 @@ test=false
 [features]
 
 [dependencies]
-bootloader = {path="../bootloader"}
+bootloader = { workspace = true }
 
-libx64 = {path = "../libx64"}
-kcore = {path = "../klib/kcore", features=["alloc"]}
-kalloc = {path = "../klib/kalloc"}
+libx64 = { workspace = true }
+kcore = {workspace = true, features=["alloc"]}
+kalloc = { workspace = true }
 
 # ----- DRIVERS -----
-page_mapper = {path = "../drivers/page_mapper"}
-scheduler = {path = "../drivers/scheduler"}
-pic = {path = "../drivers/pic"}
-keyboard = {path = "../drivers/keyboard"}
-vesa = {path = "../drivers/vesa"}
-serialuart16550 = {path = "../drivers/serialuart16550"}
+page_mapper = { workspace = true }
+scheduler = { workspace = true }
+pic = { workspace = true }
+keyboard = { workspace = true }
+vesa = { workspace = true }
+serialuart16550 = { workspace = true }
 
 # ----- UTILS -----
-bitflags = {version="1", default-features=false}
-tracing = {path = "../utils/tracing/tracing", default-features=false, features=[]}
-interrupt_list = {path = "../utils/interrupt_list", features=["libx64"]}
-qemu_logger = {path = "../utils/qemu_logger"}
+tracing = { workspace = true }
+interrupt_list = { workspace = true, features=["libx64"] }
+qemu_logger = { workspace = true }
+
+[dependencies.bitflags]
+workspace = true
+

@@ -1,3 +1,5 @@
+cargo-features = ["workspace-inheritance"]
+
 [package]
 name = "page_mapper"
 version = "0.1.0"
@@ -6,5 +8,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tracing = {path = "../../utils/tracing/tracing", default-features=false, features=["attributes"]}
-libx64 = {path="../../libx64"}
+tracing = { workspace = true, features=["attributes"] }
+libx64 = { workspace = true }

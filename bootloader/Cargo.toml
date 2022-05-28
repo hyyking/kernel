@@ -1,3 +1,5 @@
+cargo-features = ["workspace-inheritance"]
+
 [package]
 name = "bootloader"
 version = "0.10.11"
@@ -14,14 +16,14 @@ name = "bios"
 required-features = ["bios_bin"]
 
 [dependencies]
-tracing = { path = "../utils/tracing/tracing", features=["attributes"], optional = true, default-features = false }
-qemu_logger = { path = "../utils/qemu_logger", optional = true }
+tracing = { workspace = true, features=["attributes"], optional = true }
+qemu_logger = { workspace = true, optional = true }
+libx64 = { workspace = true, optional = true }
+page_mapper = { workspace = true, optional = true }
 
 xmas-elf = { version = "0.8", optional = true }
 rsdp = { version = "1.0.0", optional = true }
 
-libx64 = { path = "../libx64", optional = true }
-page_mapper = { path = "../drivers/page_mapper", optional = true }
 
 
 [build-dependencies]

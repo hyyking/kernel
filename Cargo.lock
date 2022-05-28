@@ -21,7 +21,7 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
 name = "bitfield"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "paste",
 ]
@@ -153,7 +153,7 @@ dependencies = [
 
 [[package]]
 name = "interrupt_list"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "libx64",
  "proc-macro2",
@@ -178,7 +178,6 @@ dependencies = [
  "futures-util",
  "kalloc",
  "libx64",
- "log",
 ]
 
 [[package]]
@@ -276,7 +275,7 @@ dependencies = [
 
 [[package]]
 name = "mais"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "kio",
 ]
@@ -407,12 +406,11 @@ dependencies = [
 
 [[package]]
 name = "qemu_logger"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "kcore",
  "kio",
  "libx64",
- "log",
  "mais",
  "protocols",
  "rkyv",
@@ -487,7 +485,6 @@ version = "0.1.0"
 dependencies = [
  "kalloc",
  "kcore",
- "log",
 ]
 
 [[package]]
@@ -627,6 +624,7 @@ dependencies = [
 [[package]]
 name = "tracing"
 version = "0.2.0"
+source = "git+https://github.com/tokio-rs/tracing#644b6bb1627a042a0a20113a6e74f6b8be3ddcb3"
 dependencies = [
  "cfg-if",
  "pin-project-lite",
@@ -648,6 +646,7 @@ dependencies = [
 [[package]]
 name = "tracing-attributes"
 version = "0.2.0"
+source = "git+https://github.com/tokio-rs/tracing#644b6bb1627a042a0a20113a6e74f6b8be3ddcb3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -666,6 +665,7 @@ dependencies = [
 [[package]]
 name = "tracing-core"
 version = "0.2.0"
+source = "git+https://github.com/tokio-rs/tracing#644b6bb1627a042a0a20113a6e74f6b8be3ddcb3"
 
 [[package]]
 name = "unicode-ident"
@@ -686,7 +686,6 @@ dependencies = [
  "bootloader",
  "kcore",
  "libx64",
- "log",
  "noto-sans-mono-bitmap",
 ]
 

@@ -1,3 +1,5 @@
+cargo-features = ["workspace-inheritance"]
+
 [package]
 name = "konsole"
 version = "0.1.0"
@@ -5,35 +7,24 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[dependencies.mais]
-path = "../utils/mais"
+[dependencies]
+mais = { workspace = true }
+protocols = { workspace = true, features = ["log", "alloc"], default-features=false }
+kcore = { workspace = true }
 
 [dependencies.bytes]
-version = "1"
+workspace = true
 
-[dependencies.protocols]
-path = "../protocols"
-features = ["log", "alloc"]
-default-features=false
+[dependencies.rkyv]
+workspace = true
 
 [dependencies.tokio]
 version = "1"
 features = ["net", "rt", "macros", "io-util", "io-std", "time", "tracing", "parking_lot"]
 default-features=false
 
-# [dependencies.futures_util]
-# version = "0.3"
-# default-features=false
-
-[dependencies.kcore]
-path = "../klib/kcore"
-
-
 [dependencies.tokio-util]
 version = "0.7"
 features = ["codec", "tracing"]
 default-features=false
 
-[dependencies.rkyv]
-features = ["size_32", "strict"]
-version = "0.7"

@@ -1,3 +1,5 @@
+cargo-features = ["workspace-inheritance"]
+
 [package]
 name = "protocols"
 version = "0.1.0"
@@ -10,14 +12,9 @@ default = []
 alloc = ["rkyv/alloc"]
 log = []
 
-[dependencies.rkyv]
-version = "0.7"
-features = ["size_32", "strict"]
-default-features = false
+[dependencies]
+rkyv = { workspace = true, default-features = false }
 
-[dev-dependencies.rkyv]
-version = "0.7"
-features = ["size_32", "strict", "validation"]
-
-[dev-dependencies.bytecheck]
-version = "0.6.8"
+[dev-dependencies]
+rkyv = { workspace = true, features = ["size_32", "strict", "validation"]}
+bytecheck = "0.6"

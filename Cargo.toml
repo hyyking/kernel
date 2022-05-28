@@ -25,9 +25,64 @@ members = [
     "drivers/serialuart16550",
 ]
 
-exclude = [
-    "utils/tracing"
-]
+[workspace.dependencies]
+kernel = { path = "kernel" }
+bootloader = { path = "bootloader" }
+libx64 = { path = "libx64" }
+
+# ----- klib
+kcore = { path = "klib/kcore" }
+kalloc = { path = "klib/kalloc" }
+kio = { path = "klib/kio" }
+
+protocols = { path = "protocols" }
+
+# ----- utils
+bitfield = { path = "utils/bitfield" }
+interrupt_list = { path = "utils/interrupt_list" }
+qemu_logger = { path = "utils/qemu_logger" }
+mais = { path = "utils/mais" }
+
+# ----- drivers
+page_mapper = { path = "drivers/page_mapper" }
+scheduler = { path = "drivers/scheduler" }
+pic = { path = "drivers/pic" }
+keyboard = { path = "drivers/keyboard" }
+vga = { path = "drivers/vga" }
+vesa = { path = "drivers/vesa" }
+serialuart16550 = { path = "drivers/serialuart16550" }
+
+[workspace.dependencies.xmas-elf]
+version = "0.8"
+
+[workspace.dependencies.crossbeam-queue]
+version = "0.3"
+default-features = false
+
+[workspace.dependencies.futures-util]
+version = "0.3"
+default-features = false
+
+[workspace.dependencies.rkyv]
+version = "0.7"
+features = ["size_32", "strict"]
+default-features = false
+
+[workspace.dependencies.bytes]
+version = "1"
+
+[workspace.dependencies.bitflags]
+version = "1"
+default-features = false
+
+[workspace.dependencies.tracing]
+git = "https://github.com/tokio-rs/tracing"
+default-features = false
+
+[workspace.dependencies.tracing-core]
+git = "https://github.com/tokio-rs/tracing"
+default-features = false
+
 
 [profile.dev]
 panic = "abort"

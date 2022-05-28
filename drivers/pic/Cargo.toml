@@ -1,3 +1,5 @@
+cargo-features = ["workspace-inheritance"]
+
 [package]
 name = "pic"
 version = "0.1.0"
@@ -6,5 +8,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bitfield = {path="../../utils/bitfield"}
-libx64 = {path="../../libx64"}
+bitfield = { workspace = true }
+libx64 = { workspace = true }

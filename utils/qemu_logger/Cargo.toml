@@ -1,22 +1,19 @@
+cargo-features = ["workspace-inheritance"]
+
 [package]
 name = "qemu_logger"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-log = {version="0.4", default-features=false}
-tracing-core = {path = "../tracing/tracing-core", default-features=false}
+tracing-core = {workspace = true}
+rkyv = { workspace = true, default-features = false }
 
-serialuart16550 = {path = "../../drivers/serialuart16550"}
-kcore = {path = "../../klib/kcore"}
-kio = {path = "../../klib/kio"}
-libx64 = {path = "../../libx64"}
-mais = {path = "../mais"}
-protocols = {path ="../../protocols", features=["log"], default-features=false}
-
-[dependencies.rkyv]
-version = "0.7"
-features = ["size_32", "strict"]
-default-features = false
+serialuart16550 = { workspace = true }
+kcore = { workspace = true }
+kio = { workspace = true }
+libx64 = { workspace = true }
+mais = { workspace = true }
+protocols = { workspace = true, features=["log"], default-features=false}
