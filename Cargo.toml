@@ -1,17 +1,20 @@
 [workspace]
 members = [
     "kernel",
-    "libx64",
-    "kcore",  
-    "kalloc",
     "bootloader",
-    
+    "libx64",
+
+    "klib/kcore",  
+    "klib/kalloc",
+    "klib/kio",
+
     "konsole",
     "protocols",
 
     "utils/bitfield",
     "utils/interrupt_list",
     "utils/qemu_logger",
+    "utils/mais",
     
     "drivers/page_mapper",
     "drivers/scheduler",
@@ -20,6 +23,10 @@ members = [
     "drivers/vga",
     "drivers/vesa",
     "drivers/serialuart16550",
+]
+
+exclude = [
+    "utils/tracing"
 ]
 
 [profile.dev]

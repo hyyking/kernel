@@ -1,6 +1,9 @@
 #![no_std]
 #![no_main]
-#![feature(step_trait)]
+#![feature(step_trait, never_type)]
+
+#[macro_use]
+extern crate tracing;
 
 use core::{
     arch::{asm, global_asm},
@@ -9,14 +12,14 @@ use core::{
 
 use bootloader::{
     binary::{
-        bootloader::{Bootloader, Kernel, KernelError},
+        bootloader::{Bootloader, BootloaderError, Kernel, KernelError},
         memory::{BiosFrameAllocator, E820MemoryMap},
         CONFIG,
     },
     boot_info::{FrameBufferInfo, PixelFormat},
 };
 
-use page_mapper::OffsetMapper;
+use page_mapper::{instrumented::TracingMapper, OffsetMapper};
 
 use libx64::address::{PhysicalAddr, VirtualAddr};
 
@@ -61,8 +64,14 @@ pub unsafe extern "C" fn stage_4() -> ! {
         PhysicalAddr::new(0x400_000),
         &_kernel_size as *const _ as u64,
     );
+    qemu_logger::init().expect("unable to initialize logger");
 
-    bootloader_main(kernel)
+    if let Err(err) = bootloader_main(kernel) {
+        error!("{:?}", err);
+        libx64::diverging_hlt();
+    } else {
+        unreachable!("the kernel is loaded, damn you compiler");
+    }
 }
 
 fn make_framebuffer() -> (PhysicalAddr, FrameBufferInfo) {
@@ -96,69 +105,71 @@ fn make_framebuffer() -> (PhysicalAddr, FrameBufferInfo) {
     (addr, info)
 }
 
-fn bootloader_main(kernel: Result<Kernel, KernelError>) -> ! {
-    qemu_logger::init().expect("unable to initialize logger");
-    log::info!(
+fn bootloader_main(kernel: Result<Kernel, KernelError>) -> Result<!, BootloaderError> {
+    let span = info_span!(
+        "bootloader",
+        version = concat!(
+            env!("CARGO_PKG_VERSION_MAJOR"), ".",
+            env!("CARGO_PKG_VERSION_MINOR"), ".",
+            env!("CARGO_PKG_VERSION_PATCH")
+        )
+    );
+    let entered = span.enter();
+
+    info!(
         "BIOS boot at {:?}",
         PhysicalAddr::from_ptr(bootloader_main as *const ())
     );
+
     let kernel = kernel.expect("invalid kernel no booting will be attempted");
 
     // Extract lower 8 bits
     let memory_map = unsafe {
         E820MemoryMap::from_memory(
-            VirtualAddr::new(&_memory_map as *const _ as u64),
+            VirtualAddr::from_ptr(&_memory_map),
             usize::try_from((mmap_ent & 0xff) as u64).unwrap(),
             core::iter::Step::forward(kernel.frames().last().unwrap(), 1),
         )
     };
 
     // We identity-map all memory, so the offset between physical and virtual addresses is 0
-    let bootloader = Bootloader::<OffsetMapper, _, _>::new(
+    let bootloader = Bootloader::<TracingMapper<OffsetMapper>, _, _>::new(
         kernel,
-        BiosFrameAllocator::new(memory_map).unwrap(),
-        OffsetMapper::new(VirtualAddr::new(0)),
+        BiosFrameAllocator::new(memory_map)?,
+        TracingMapper::from(OffsetMapper::new(VirtualAddr::new(0))),
         CONFIG.boot_info_address.map(VirtualAddr::new),
-    )
-    .unwrap();
-
-    let mut bootloader = bootloader
-        .load_kernel()
-        .unwrap()
-        .setup_stack(
-            CONFIG.kernel_stack_address.map(VirtualAddr::new),
-            CONFIG.kernel_stack_size,
-        )
-        .unwrap();
+    )?;
 
     enable_write_protect_bit();
+
+    let mut bootloader = bootloader.load_kernel()?.setup_stack(
+        CONFIG.kernel_stack_address.map(VirtualAddr::new),
+        CONFIG.kernel_stack_size,
+    )?;
+
+    bootloader.detect_rsdp();
 
     if CONFIG.map_framebuffer {
         let (start, info) = make_framebuffer();
 
-        bootloader
-            .map_framebuffer(
-                start,
-                info,
-                CONFIG.framebuffer_address.map(VirtualAddr::new),
-            )
-            .unwrap();
+        bootloader.map_framebuffer(
+            start,
+            info,
+            CONFIG.framebuffer_address.map(VirtualAddr::new),
+        )?;
     }
 
-    bootloader.detect_rsdp();
-
     // NOTE: this could be an opt-in, see other methods (ie. id mapping, offset, temporary, recursive level4)
-    // right now this is kinda needed as their is no way to use another method else
-    bootloader
-        .map_physical_memory(VirtualAddr::new(0x10_0000_0000))
-        .expect("couldn't map physical memory");
+    // right now this is kinda needed as their is no way to use another method
+    bootloader.map_physical_memory(VirtualAddr::new(0x10_0000_0000))?;
 
+    drop(entered);
     bootloader.boot()
 }
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    log::error!("[PANIC]: {}", info);
+    error!("[PANIC]: {}", info);
     libx64::diverging_hlt()
 }
 

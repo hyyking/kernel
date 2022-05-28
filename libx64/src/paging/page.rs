@@ -9,7 +9,7 @@ use crate::{
     },
 };
 
-use super::table::Level4;
+use super::{frame::FrameRange, table::Level4};
 
 pub trait PageTranslator {
     /// # Errors
@@ -18,6 +18,7 @@ pub trait PageTranslator {
     fn try_translate(&mut self, addr: VirtualAddr) -> Result<Translation, FrameError>;
 }
 
+#[derive(Debug)]
 pub struct TlbFlush<const P: usize>(Page<P>)
 where
     PageCheck<P>: PageSize;
@@ -101,7 +102,98 @@ where
     /// # Errors
     ///
     /// Errors on the first miss-mapped page
-    fn map_range<A, P, F>(
+    fn map_range<A>(
+        &mut self,
+        pages: PageRange<N>,
+        frames: FrameRange<N>,
+        flags: Flags,
+        allocator: &mut A,
+        method: TlbMethod,
+    ) -> Result<(), FrameError>
+    where
+        A: FrameAllocator<Page4Kb>,
+    {
+        if pages.len() != frames.len() {
+            return Err(FrameError::Alloc);
+        }
+        let flushfn = match method {
+            TlbMethod::FlushAll => TlbFlush::flush,
+            _ => TlbFlush::ignore,
+        };
+
+        pages
+            .zip(frames)
+            .try_for_each(|(page, frame)| self.map(page, frame, flags, allocator).map(flushfn))?;
+
+        if method == TlbMethod::Invalidate {
+            super::invalidate_tlb();
+        }
+
+        Ok(())
+    }
+
+    /// # Errors
+    ///
+    /// This method errors on the first miss-mapped page or if no frames are available in the allocator
+    #[allow(clippy::trait_duplication_in_bounds)]
+    fn map_range_alloc<A>(
+        &mut self,
+        mut pages: PageRange<N>,
+        flags: Flags,
+        allocator: &mut A,
+        method: TlbMethod,
+    ) -> Result<(), FrameError>
+    where
+        A: FrameAllocator<Page4Kb> + FrameAllocator<N>,
+    {
+        let flushfn = match method {
+            TlbMethod::FlushAll => TlbFlush::flush,
+            _ => TlbFlush::ignore,
+        };
+
+        pages.try_for_each(|page| {
+            let mut frame = <A as FrameAllocator<N>>::alloc(allocator)?;
+            frame.clear();
+            self.map(page, frame, flags, allocator).map(flushfn)
+        })?;
+
+        if method == TlbMethod::Invalidate {
+            super::invalidate_tlb();
+        }
+
+        Ok(())
+    }
+
+    /// # Errors
+    /// This method errors on the first miss-mapped page
+    fn id_map_range<A>(
+        &mut self,
+        mut frames: FrameRange<N>,
+        flags: Flags,
+        allocator: &mut A,
+        method: TlbMethod,
+    ) -> Result<(), FrameError>
+    where
+        A: FrameAllocator<Page4Kb>,
+    {
+        let flushfn = match method {
+            TlbMethod::FlushAll => TlbFlush::flush,
+            _ => TlbFlush::ignore,
+        };
+
+        frames.try_for_each(|frame| self.id_map(frame, flags, allocator).map(flushfn))?;
+
+        if method == TlbMethod::Invalidate {
+            super::invalidate_tlb();
+        }
+
+        Ok(())
+    }
+
+    /// # Errors
+    ///
+    /// Errors on the first miss-mapped page
+    fn map_iter<A, P, F>(
         &mut self,
         pages: P,
         frames: F,
@@ -127,65 +219,6 @@ where
         pages
             .zip(frames)
             .try_for_each(|(page, frame)| self.map(page, frame, flags, allocator).map(flushfn))?;
-
-        if method == TlbMethod::Invalidate {
-            super::invalidate_tlb();
-        }
-
-        Ok(())
-    }
-
-    /// # Errors
-    ///
-    /// This method errors on the first miss-mapped page or if no frames are available in the allocator
-    #[allow(clippy::trait_duplication_in_bounds)]
-    fn map_range_alloc<A, P>(
-        &mut self,
-        mut pages: P,
-        flags: Flags,
-        allocator: &mut A,
-        method: TlbMethod,
-    ) -> Result<(), FrameError>
-    where
-        A: FrameAllocator<Page4Kb> + FrameAllocator<N>,
-        P: Iterator<Item = Page<N>>,
-    {
-        let flushfn = match method {
-            TlbMethod::FlushAll => TlbFlush::flush,
-            _ => TlbFlush::ignore,
-        };
-
-        pages.try_for_each(|page| {
-            let frame = <A as FrameAllocator<N>>::alloc(allocator)?;
-            self.map(page, frame, flags, allocator).map(flushfn)
-        })?;
-
-        if method == TlbMethod::Invalidate {
-            super::invalidate_tlb();
-        }
-
-        Ok(())
-    }
-
-    /// # Errors
-    /// This method errors on the first miss-mapped page
-    fn id_map_range<A, F>(
-        &mut self,
-        mut frames: F,
-        flags: Flags,
-        allocator: &mut A,
-        method: TlbMethod,
-    ) -> Result<(), FrameError>
-    where
-        A: FrameAllocator<Page4Kb>,
-        F: Iterator<Item = PhysicalFrame<N>>,
-    {
-        let flushfn = match method {
-            TlbMethod::FlushAll => TlbFlush::flush,
-            _ => TlbFlush::ignore,
-        };
-
-        frames.try_for_each(|frame| self.id_map(frame, flags, allocator).map(flushfn))?;
 
         if method == TlbMethod::Invalidate {
             super::invalidate_tlb();

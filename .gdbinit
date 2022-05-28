@@ -4,11 +4,13 @@ set print pretty on
 
 directory bootloader
 directory kernel
+directory libx64
+directory drivers/page_mapper
 
-symbol-file target/x86_64-bootloader/release/bios
-file target/target/debug/kernel
+
+# file target/target/debug/kernel
+file target/x86_64-bootloader/release/bios
 
 target remote :1234
 
-hbreak switch_to_kernel
 hbreak _start

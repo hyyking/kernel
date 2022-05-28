@@ -9,3 +9,4 @@ edition = "2021"
 bitflags = {version="1", default-features=false}
 bitfield = {path="../../utils/bitfield"}
 libx64 = {path="../../libx64"}
+kio = {path="../../klib/kio"}

@@ -150,7 +150,7 @@ impl syn::parse::Parse for MacroState {
         let all = f.content.as_ref().unwrap().1.iter().map(|i| match i {
             e @ (syn::Item::Const(_) |
                  syn::Item::Static(_) |
-                 syn::Item::Macro(_) | 
+                 syn::Item::Macro(_) |
                  syn::Item::Fn(_) |
                  syn::Item::Use(_)) => Ok(e),
             _ => Err(syn::Error::new_spanned(

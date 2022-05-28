@@ -36,12 +36,21 @@ where
 
 pub struct IdentityTranslator;
 
-impl<L: PageLevel, const N: usize> FrameTranslator<L, N> for IdentityTranslator where PageCheck<N>: PageSize {
+impl<L: PageLevel, const N: usize> FrameTranslator<L, N> for IdentityTranslator
+where
+    PageCheck<N>: PageSize,
+{
     unsafe fn translate_frame<'a>(
         &self,
         frame: PhysicalFrame<N>,
     ) -> Pin<&'a mut PageTable<<L as PageLevel>::Next>> {
-        Pin::new_unchecked(frame.ptr().ptr::<PageTable<<L as PageLevel>::Next>>().unwrap().as_mut())
+        Pin::new_unchecked(
+            frame
+                .ptr()
+                .ptr::<PageTable<<L as PageLevel>::Next>>()
+                .unwrap()
+                .as_mut(),
+        )
     }
 }
 
@@ -98,6 +107,13 @@ where
     #[must_use]
     pub const fn ptr(self) -> PhysicalAddr {
         self.addr
+    }
+
+    #[inline]
+    pub fn clear(&mut self) {
+        let ptr = self.ptr().ptr::<u8>().unwrap().as_ptr();
+        let slice = unsafe { core::slice::from_raw_parts_mut(ptr, N / 8) };
+        slice.fill(0);
     }
 }
 
@@ -361,7 +377,7 @@ where
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "FrameRangeInclusive<{}>({:#x}..{:#x})",
+            "FrameRange<{}>({:#x}..{:#x})",
             pretty_pagesize(N),
             self.start().as_u64(),
             self.end().as_u64(),

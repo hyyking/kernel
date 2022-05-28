@@ -14,10 +14,10 @@ name = "bios"
 required-features = ["bios_bin"]
 
 [dependencies]
-log = { version = "0.4.8", optional = true, features = ["max_level_debug"] }
+tracing = { path = "../utils/tracing/tracing", features=["attributes"], optional = true, default-features = false }
 qemu_logger = { path = "../utils/qemu_logger", optional = true }
 
-xmas-elf = { version = "0.6.2", optional = true }
+xmas-elf = { version = "0.8", optional = true }
 rsdp = { version = "1.0.0", optional = true }
 
 libx64 = { path = "../libx64", optional = true }
@@ -35,6 +35,6 @@ proc-macro2 = { version = "1.0", optional = true }
 default = []
 bios_bin = ["binary", "rsdp"]
 binary = [
-    "llvm-tools-build", "toml", "xmas-elf", "log",
+    "llvm-tools-build", "toml", "xmas-elf", "tracing",
     "serde", "quote", "proc-macro2", "qemu_logger", "libx64", "page_mapper"
 ]

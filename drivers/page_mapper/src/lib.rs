@@ -1,8 +1,9 @@
 #![no_std]
 
 #[macro_use]
-extern crate log;
+extern crate tracing;
 
+pub mod instrumented;
 pub mod offset;
 pub mod walker;
 
@@ -55,12 +56,6 @@ impl OffsetMapper {
     }
 }
 
-impl PageTranslator for OffsetMapper {
-    fn try_translate(&mut self, addr: VirtualAddr) -> Result<Translation, FrameError> {
-        self.walker.try_translate_addr(addr)
-    }
-}
-
 impl PageMapper<Page4Kb> for OffsetMapper {
     unsafe fn from_level4(page: PinTableMut<'_, Level4>) -> Self {
         Self::from_p4(page, VirtualAddr::new(0))
@@ -82,7 +77,6 @@ impl PageMapper<Page4Kb> for OffsetMapper {
     {
         let addr = page.ptr();
         let parent_flags = Flags::PRESENT | Flags::RW | Flags::US;
-        trace!("Mapping page: {:?} -> {:?}", &page, &frame);
 
         let level_4 = self.walker.level4();
 
@@ -195,8 +189,6 @@ impl PageMapper<Page2Mb> for OffsetMapper {
         let addr = page.ptr();
         let parent_flags = Flags::PRESENT | Flags::RW | Flags::US;
 
-        trace!("Mapping page: {:?} -> {:?}", &page, &frame);
-
         let level_4 = self.walker.level4();
 
         let entry = level_4.index_pin_mut(addr.page_table_index(Level4));
@@ -291,7 +283,6 @@ impl PageMapper<Page1Gb> for OffsetMapper {
     {
         let addr = page.ptr();
         let parent_flags = Flags::PRESENT | Flags::RW | Flags::US;
-        trace!("Mapping page: {:?} -> {:?}", &page, &frame);
 
         let level_4 = self.walker.level4();
 
@@ -344,6 +335,12 @@ impl PageMapper<Page1Gb> for OffsetMapper {
             entry.as_mut().clear();
         }
         Ok(TlbFlush::new(page))
+    }
+}
+
+impl PageTranslator for OffsetMapper {
+    fn try_translate(&mut self, addr: VirtualAddr) -> Result<Translation, FrameError> {
+        self.walker.try_translate_addr(addr)
     }
 }
 

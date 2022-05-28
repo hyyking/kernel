@@ -14,7 +14,6 @@ extern crate log;
 
 pub mod either;
 
-pub mod io;
 pub mod ptr;
 
 pub mod queue {
@@ -34,3 +33,9 @@ pub mod futures {
 
 pub mod sync;
 pub mod tables;
+
+pub mod error {
+    pub trait Error {}
+
+    impl Error for &'static str {}
+}

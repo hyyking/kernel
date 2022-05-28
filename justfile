@@ -6,20 +6,20 @@ SERIAL_ADDR := "127.0.0.1:8000"
 
 #cargo r --bin konsole &
 #sleep 0.5
-run: konsole image  
-    cargo run --bin konsole -- {{SERIAL_ADDR}} &
+run: konsole image
+    cargo run --release --bin konsole -- {{SERIAL_ADDR}} &
     sleep 0.5
     qemu-system-x86_64 {{QEMU_ARGS}} -serial tcp:{{SERIAL_ADDR}}
 #nc -l 8000 &
 
 @konsole:
-    cargo build --bin konsole
+    cargo build --release --bin konsole
 
 run-debug: image 
     qemu-system-x86_64 {{QEMU_ARGS}} -d int,cpu_reset -no-reboot -serial stdio
 
 run-gdb: image
-    qemu-system-x86_64 {{QEMU_ARGS}} -d int,cpu_reset -no-reboot -s -S -nographic
+    qemu-system-x86_64 {{QEMU_ARGS}} -d int,cpu_reset -no-reboot -s -S -serial stdio
 
 image: kernel bootloader
     #!/usr/bin/sh
@@ -45,5 +45,9 @@ bootloader $KERNEL=`find ~+ -type f -name kernel`:
         exit 1
     fi
 
-    cd bootloader && cargo build --bin bios --release --features bios_bin 
+    cd bootloader && cargo build --bin bios --release --features bios_bin
     printf "\e[32;1m[2/3] Bootloader build successful\n\e[0m"
+
+bootloader-doc $KERNEL=`find ~+ -type f -name kernel`:
+    cd bootloader && cargo doc --bin bios --features bios_bin --open
+

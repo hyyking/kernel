@@ -6,5 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-log = {version="0.4"}
+tracing = {path = "../../utils/tracing/tracing", default-features=false, features=["attributes"]}
 libx64 = {path="../../libx64"}

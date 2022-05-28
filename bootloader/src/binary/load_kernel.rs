@@ -7,7 +7,9 @@ use libx64::{
     paging::{
         entry::Flags,
         frame::{FrameAllocator, FrameError, FrameRange, PhysicalFrame},
-        page::{Page, PageMapper, PageRange, PageRangeInclusive, PageTranslator, TlbFlush},
+        page::{
+            Page, PageMapper, PageRange, PageTranslator, TlbFlush, TlbMethod,
+        },
         table::Translation,
         Page4Kb,
     },
@@ -86,6 +88,8 @@ where
             }
         }
 
+        info!("Applying rellocations");
+
         // Apply relocations in virtual memory.
         for program_header in elf_file.program_iter() {
             if let Type::Dynamic = program_header.get_type()? {
@@ -106,7 +110,12 @@ where
     M: PageMapper<Page4Kb> + PageTranslator,
 {
     fn handle_load_segment(&mut self, segment: ProgramHeader) -> Result<(), FrameError> {
-        info!("Handling Segment: {:#x?}", segment);
+        info!(
+            "Segment({:?}): {} ({}KiB)",
+            segment.get_type().unwrap_or(xmas_elf::program::Type::Null),
+            segment.flags(),
+            segment.file_size() as usize / libx64::units::KB,
+        );
 
         let phys_start_addr = self.kernel.start + segment.offset();
         let start_frame = PhysicalFrame::<Page4Kb>::containing(phys_start_addr);
@@ -114,8 +123,11 @@ where
             (phys_start_addr + segment.file_size()).align_up(Page4Kb as u64),
         );
 
-        let virt_start_addr = self.kernel.offset() + segment.virtual_addr();
-        let start_page = Page::<Page4Kb>::containing(virt_start_addr);
+        let start_page = Page::<Page4Kb>::containing(self.kernel.offset() + segment.virtual_addr());
+        let end_page = Page::<Page4Kb>::containing(
+            (self.kernel.offset() + segment.virtual_addr() + segment.file_size())
+                .align_up(Page4Kb as u64),
+        );
 
         let mut segment_flags = Flags::PRESENT;
 
@@ -129,15 +141,23 @@ where
             segment_flags |= Flags::RW;
         }
 
-        // map all frames of the segment at the desired virtual address
-        for frame in FrameRange::new(start_frame, end_frame) {
-            let offset = frame.ptr().as_u64() - start_frame.ptr().as_u64();
-            let page = Page::containing(VirtualAddr::new(start_page.ptr().as_u64() + offset));
-            self.page_table
-                .map(page, frame, segment_flags, self.frame_allocator)
-                .map(TlbFlush::ignore)?
-        }
-
+        self.page_table.map_range(
+            PageRange::new(start_page, end_page),
+            FrameRange::new(start_frame, end_frame),
+            segment_flags,
+            self.frame_allocator,
+            TlbMethod::Ignore,
+        )?;
+        /*
+                // map all frames of the segment at the desired virtual address
+                for frame in FrameRange::new(start_frame, end_frame) {
+                    let offset = frame.ptr().as_u64() - start_frame.ptr().as_u64();
+                    let page = Page::containing(VirtualAddr::new(start_page.ptr().as_u64() + offset));
+                    self.page_table
+                        .map(page, frame, segment_flags, self.frame_allocator)
+                        .map(TlbFlush::ignore)?
+                }
+        */
         // Handle .bss section (mem_size > file_size)
         if segment.mem_size() > segment.file_size() {
             // .bss section (or similar), which needs to be mapped and zeroed
@@ -153,6 +173,12 @@ where
         segment_flags: Flags,
     ) -> Result<(), FrameError> {
         info!("Mapping bss section");
+        info!(
+            "Segment({:?}): {} ({}KiB)",
+            segment.get_type().unwrap_or(xmas_elf::program::Type::Null),
+            segment.flags(),
+            segment.file_size() as usize / libx64::units::KB,
+        );
 
         let virt_start_addr = self.kernel.offset() + segment.virtual_addr();
         let mem_size = segment.mem_size();
@@ -161,10 +187,6 @@ where
         // calculate virual memory region that must be zeroed
         let zero_start = virt_start_addr + file_size;
         let zero_end = virt_start_addr + mem_size;
-
-        // a type alias that helps in efficiently clearing a page
-        type PageArray = [u8; Page4Kb / 8];
-        const ZERO_ARRAY: PageArray = [0; Page4Kb / 8];
 
         // In some cases, `zero_start` might not be page-aligned. This requires some
         // special treatment because we can't safely zero a frame of the original file.
@@ -215,22 +237,14 @@ where
         let start_page = Page::<Page4Kb>::containing(
             VirtualAddr::new(zero_start.as_u64()).align_up(Page4Kb as u64),
         );
-        let end_page = Page::<Page4Kb>::containing(zero_end);
-        for page in PageRangeInclusive::new(start_page, end_page) {
-            // allocate a new unused frame
-            let frame = self.frame_allocator.alloc().unwrap();
+        let end_page = Page::<Page4Kb>::containing(zero_end.align_up(Page4Kb as u64));
 
-            // zero frame, utilizing identity-mapping
-            let frame_ptr = frame.ptr().as_u64() as *mut PageArray;
-            unsafe { frame_ptr.write(ZERO_ARRAY) };
-
-            // map frame
-            self.page_table
-                .map(page, frame, segment_flags, self.frame_allocator)
-                .map(TlbFlush::ignore)?;
-        }
-
-        Ok(())
+        self.page_table.map_range_alloc(
+            PageRange::new(start_page, end_page),
+            segment_flags,
+            self.frame_allocator,
+            TlbMethod::Ignore,
+        )
     }
 
     /// This method is intended for making the memory loaded by a Load segment mutable.
@@ -296,17 +310,10 @@ where
             let end = start + program_header.mem_size();
             let start_page = Page::<Page4Kb>::containing(start);
             let end_page = Page::<Page4Kb>::containing(end);
+
             for page in PageRange::new(start_page, end_page) {
                 // Translate the page and get the flags.
-                let res = self.page_table.try_translate(page.ptr());
-                let flags = match res {
-                    Ok(Translation {
-                        addr: _,
-                        offset: _,
-                        flags,
-                    }) => flags,
-                    Err(_) => panic!("ERROR"),
-                };
+                let Translation { flags, .. } = self.page_table.try_translate(page.ptr())?;
 
                 if flags.contains(COPIED) {
                     // Remove the flag.

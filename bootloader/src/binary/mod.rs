@@ -93,10 +93,12 @@ where
             .alloc()
             .expect("frame allocation for boot info failed");
 
+        trace!("kernel mapping");
         kernel_mapper
             .map(page, frame, flags, frame_allocator)
             .map(TlbFlush::ignore)?;
 
+        trace!("bootloader mapping");
         // we need to be able to access it too
         bootloader_mapper
             .map(page, frame, flags, frame_allocator)

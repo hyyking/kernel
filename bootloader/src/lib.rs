@@ -66,13 +66,13 @@ for all possible configuration options.
 */
 
 #![cfg_attr(not(feature = "builder"), no_std)]
-#![feature(maybe_uninit_slice)]
+#![feature(maybe_uninit_slice, never_type)]
 #![deny(unsafe_op_in_unsafe_fn)]
 // TODO: reinstate #![warn(missing_docs)]
 
 #[cfg(feature = "binary")]
 #[macro_use]
-extern crate log;
+extern crate tracing;
 
 pub use crate::boot_info::BootInfo;
 pub use crate::config::Config;

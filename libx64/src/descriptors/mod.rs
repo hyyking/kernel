@@ -12,6 +12,7 @@ pub use interrupt::InterruptGateDescriptor;
 pub use system::{SystemSegmentDescriptor, SystemSegmentType};
 pub use task::TaskGateDescriptor;
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct GdtNull;
 
 /// SAFETY: they should have the same layout

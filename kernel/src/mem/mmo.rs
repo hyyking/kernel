@@ -44,7 +44,7 @@ where
 {
     /// # Errors
     ///
-    /// Errors if the allocator doesn't have enought frames
+    /// Errors if the allocator doesn't have enough frames
     pub fn map<M, A>(&self, ctx: &mut MemoryContext<M, A>) -> Result<(), FrameError>
     where
         A: FrameAllocator<N> + FrameAllocator<Page4Kb>,
@@ -66,7 +66,7 @@ where
 
     /// # Errors
     ///
-    /// Errors if the allocator doesn't have enought frames
+    /// Errors if the allocator doesn't have enough frames
     pub fn unmap<M, A>(self, mapper: &mut M) -> Result<(), FrameError>
     where
         A: FrameAllocator<N> + FrameAllocator<Page4Kb>,

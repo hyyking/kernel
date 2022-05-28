@@ -1,6 +1,6 @@
 use bitfield::bitfield;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 #[repr(C, packed)]
 pub struct CodeSegmentDescriptor {
     limit_low: u16,
@@ -49,8 +49,22 @@ impl CodeSegmentDescriptor {
     }
 }
 
+impl core::fmt::Debug for CodeSegmentDescriptor {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        if *self == Self::kernel_x64() {
+            write!(f, "CodeSegmentDescriptor::kernel_x64()")?;
+            Ok(())
+        } else {
+            // TODO: find a better impl that's not too long
+            f.debug_struct("CodeSegmentDescriptor")
+                .field("flags", &self.flags)
+                .finish()
+        }
+    }
+}
+
 bitfield! {
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, Eq, PartialEq)]
     #[repr(transparent)]
     pub unsafe struct CsFlags: u8 {
         access: 0..1,
@@ -80,7 +94,7 @@ bitfield! {
 }
 
 bitfield! {
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, Eq, PartialEq)]
     #[repr(transparent)]
     pub unsafe struct FlagsLimit: u8 {
         limit_high: 0..4,
